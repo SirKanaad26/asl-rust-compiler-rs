@@ -44,7 +44,7 @@ fn generate_bitfield_impl(
     is_array: bool,
 ) {
     let reg_size: u32 = reg.NAT_LIT().unwrap().get_text().parse().unwrap();
-    
+
     if let Some(field_list) = reg.registerFieldCommaList() {
         let fields = field_list.registerField_all();
 
@@ -53,8 +53,14 @@ fn generate_bitfield_impl(
             emitter.emit(&format!("impl {} {{", name));
             emitter.indent();
 
-            for field in fields {
-                generate_bitfield_getter(emitter, &field, is_array, reg_size);  // Pass reg_size
+            for field in &fields {
+                generate_bitfield_getter(emitter, field, is_array, reg_size);
+            }
+            
+            emitter.emit("");  // Blank line between getters and setters
+            
+            for field in &fields {
+                generate_bitfield_setter(emitter, field, is_array, reg_size);
             }
 
             emitter.dedent();
@@ -62,7 +68,6 @@ fn generate_bitfield_impl(
         }
     }
 }
-
 
 fn generate_bitfield_getter(
     emitter: &mut CodeEmitter,
@@ -108,6 +113,49 @@ fn generate_bitfield_getter(
     }
 }
 
+fn generate_bitfield_setter(
+    emitter: &mut CodeEmitter,
+    field: &Rc<crate::parser::aslparser::RegisterFieldContextAll<'_>>,
+    is_array: bool,
+    reg_size: u32,
+) {
+    let hi: u32 = field.NAT_LIT(0).unwrap().get_text().parse().unwrap();
+    let lo: u32 = field.NAT_LIT(1).unwrap().get_text().parse().unwrap();
+
+    if let Some(field_id) = field.id() {
+        let field_name = field_id.get_text();
+        let width = hi - lo + 1;
+        let field_type = width_to_rust_type(width);
+        let reg_type = size_to_rust_type(reg_size);
+
+        let accessor = if is_array { "self.0[idx]" } else { "self.0" };
+
+        let body = if lo == 0 && width == reg_size {
+            // Full width - direct assign
+            "val".to_string()
+        } else {
+            let mask = (1u64 << width) - 1;
+            if lo == 0 {
+                // No shift needed
+                format!("({} & 0x{:X}) | (val as {})", accessor, !(mask) as u64 & ((1u64 << reg_size) - 1), reg_type)
+            } else {
+                format!("({} & !(0x{:X} << {})) | ((val as {}) << {})", accessor, mask, lo, reg_type, lo)
+            }
+        };
+
+        if is_array {
+            emitter.emit(&format!(
+                "pub fn set_{}(&mut self, idx: usize, val: {}) {{ {} = {}; }}",
+                field_name, field_type, accessor, body
+            ));
+        } else {
+            emitter.emit(&format!(
+                "pub fn set_{}(&mut self, val: {}) {{ {} = {}; }}",
+                field_name, field_type, accessor, body
+            ));
+        }
+    }
+}
 
 fn size_to_rust_type(size: u32) -> &'static str {
     match size {
