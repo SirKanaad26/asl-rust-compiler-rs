@@ -21,3 +21,5 @@ target
 *.jar
 
 .DS_Store
+
+output/

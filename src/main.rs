@@ -1,7 +1,7 @@
 mod parser;
 mod codegen;
 
-use std::fs;
+use std::{env, fs, path::Path};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::InputStream;
 
@@ -14,8 +14,18 @@ use parser::aslparser::{
 use codegen::CodeEmitter;
 
 fn main() {
-    let input = fs::read_to_string("examples/register_bitfield.asl")
-        .expect("Failed to read file");
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() < 3 {
+        eprintln!("Usage: {} <input.asl> <output.rs>", args[0]);
+        std::process::exit(1);
+    }
+    
+    let input_file = &args[1];
+    let output_file = &args[2];
+
+    let input = fs::read_to_string(input_file)
+        .expect(&format!("Failed to read {}", input_file));
 
     let input_stream = InputStream::new(input.as_str());
     let lexer = aslLexer::new(input_stream);
@@ -41,5 +51,12 @@ fn main() {
         }
     }
 
-    println!("{}", emitter.output());
+    if let Some(parent) = Path::new(output_file).parent() {
+        fs::create_dir_all(parent).ok();
+    }
+
+    fs::write(output_file, emitter.output())
+        .expect(&format!("Failed to write {}", output_file));
+    
+    println!("Generated: {}", output_file);
 }
