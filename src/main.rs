@@ -10,7 +10,9 @@ use parser::aslparser::{
     RegistersContextAttrs,
     RegisterDefinitionContextAll,
     RegDefBasicContextAttrs,
+    RegDefArrayContextAttrs,  // Add this
 };
+
 use codegen::CodeEmitter;
 
 fn main() {
@@ -44,8 +46,10 @@ fn main() {
                     codegen::registers::generate_register(&mut emitter, &reg);
                 }
             }
-            RegisterDefinitionContextAll::RegDefArrayContext(_) => {
-                emitter.emit("// TODO: array register");
+            RegisterDefinitionContextAll::RegDefArrayContext(ctx) => {
+                if let Some(arr) = ctx.arrayRegister() {
+                    codegen::registers::generate_array_register(&mut emitter, &arr);
+                }
             }
             _ => {}
         }
