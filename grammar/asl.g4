@@ -51,7 +51,7 @@ definition:
       '__builtin' 'type' id SEMICOLON                                    #DefTypeBuiltin
     | 'type' id SEMICOLON                                                #DefTypeAbstract
     | 'type' id '=' typeSpec SEMICOLON                                   #DefTypeAlias
-    | 'typeSpec' qualId     'is' '(' symDeclCommaList ')'                #DefTypeStruct
+    | 'type' qualId     'is' '(' symDeclCommaList ')'                    #DefTypeStruct
     | 'enumeration' id '{' identifierCommaList0 '}' SEMICOLON            #DefTypeEnum
     | typeSpec qualId SEMICOLON                                          #DefVariable
     | 'constant' typeSpec id '=' expr SEMICOLON                          #DefConstant
