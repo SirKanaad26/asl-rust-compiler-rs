@@ -42,6 +42,20 @@ pub fn map_type(type_ctx: &Rc<TypeSpecContextAll<'_>>) -> String {
     }
 }
 
+pub fn generate_builtin_type(emitter: &mut CodeEmitter, ctx: &DefTypeBuiltinContext<'_>) {
+    let name = ctx.id().unwrap().get_text();
+    emitter.emit(&format!("// builtin: {}", name));
+}
+
+pub fn generate_constant(emitter: &mut CodeEmitter, ctx: &DefConstantContext<'_>) {
+    let name = ctx.id().unwrap().get_text();
+    let type_spec = ctx.typeSpec().unwrap();
+    let rust_type = map_type(&type_spec);
+    let value = ctx.expr().unwrap().get_text();
+
+    emitter.emit(&format!("pub const {}: {} = {};", name, rust_type, value));
+}
+
 pub fn generate_type_alias(emitter: &mut CodeEmitter, ctx: &DefTypeAliasContext<'_>) {
     let name = ctx.id().unwrap().get_text();
     let type_spec = ctx.typeSpec().unwrap();

@@ -55,6 +55,12 @@ fn main() {
             let tree = parser.definitions().expect("Parse failed");
             for def in tree.definition_all() {
                 match def.as_ref() {
+                    DefinitionContextAll::DefTypeBuiltinContext(ctx) => {
+                        codegen::types::generate_builtin_type(&mut emitter, ctx);
+                    }
+                    DefinitionContextAll::DefConstantContext(ctx) => {
+                        codegen::types::generate_constant(&mut emitter, ctx);
+                    }
                     DefinitionContextAll::DefTypeAliasContext(ctx) => {
                         codegen::types::generate_type_alias(&mut emitter, ctx);
                     }
