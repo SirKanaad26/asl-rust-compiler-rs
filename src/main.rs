@@ -61,6 +61,9 @@ fn main() {
                     DefinitionContextAll::DefConstantContext(ctx) => {
                         codegen::types::generate_constant(&mut emitter, ctx);
                     }
+                    DefinitionContextAll::DefTypeAbstractContext(ctx) => {
+                        codegen::types::generate_abstract_type(&mut emitter, ctx);
+                    }
                     DefinitionContextAll::DefTypeAliasContext(ctx) => {
                         codegen::types::generate_type_alias(&mut emitter, ctx);
                     }

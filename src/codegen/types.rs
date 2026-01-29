@@ -56,6 +56,11 @@ pub fn generate_constant(emitter: &mut CodeEmitter, ctx: &DefConstantContext<'_>
     emitter.emit(&format!("pub const {}: {} = {};", name, rust_type, value));
 }
 
+pub fn generate_abstract_type(emitter: &mut CodeEmitter, ctx: &DefTypeAbstractContext<'_>) {
+    let name = ctx.id().unwrap().get_text();
+    emitter.emit(&format!("pub struct {};", name));
+}
+
 pub fn generate_type_alias(emitter: &mut CodeEmitter, ctx: &DefTypeAliasContext<'_>) {
     let name = ctx.id().unwrap().get_text();
     let type_spec = ctx.typeSpec().unwrap();
