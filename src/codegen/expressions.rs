@@ -54,6 +54,31 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
     }
 }
 
+/// Generate a Rust lvalue string from an ASL lValExpr node
+pub fn generate_lval(lval: &Rc<LValExprContextAll<'_>>) -> String {
+    match lval.as_ref() {
+        LValExprContextAll::LValVarRefContext(ctx) => {
+            ctx.qualId().unwrap().get_text()
+        }
+        LValExprContextAll::LValMemberContext(ctx) => {
+            let obj = generate_lval(&ctx.lValExpr().unwrap());
+            let field = ctx.id().unwrap().get_text();
+            format!("{}.{}", obj, field)
+        }
+        LValExprContextAll::LValArrayIndexContext(ctx) => {
+            let obj = generate_lval(&ctx.lValExpr().unwrap());
+            let slices: Vec<String> = ctx.slice_all()
+                .iter()
+                .map(|s| s.get_text())
+                .collect();
+            format!("{}[{}]", obj, slices.join(", "))
+        }
+        _ => {
+            format!("todo!(/* lval: {} */)", lval.get_text())
+        }
+    }
+}
+
 /// Map ASL binary operators to Rust equivalents
 fn map_binop(op: &str) -> &str {
     match op {
