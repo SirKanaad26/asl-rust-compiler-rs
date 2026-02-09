@@ -23,3 +23,6 @@ target
 .DS_Store
 
 output/
+
+settings.local.json
+trial.md
