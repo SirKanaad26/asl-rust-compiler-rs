@@ -12,7 +12,9 @@ cargo build
 ```
 
 ## Usage
+```
 cargo run -- <input.asl> <output.rs>
+```
 
 ## Examples
 ```
