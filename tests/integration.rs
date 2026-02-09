@@ -82,6 +82,16 @@ fn procedure_with_assignments() {
 }
 
 #[test]
+fn if_statement() {
+    let out = run_compiler("definitions", "examples/stmt_if.asl");
+    assert!(out.contains("pub fn TestIf(x: i64) -> i64 {"), "missing TestIf signature:\n{out}");
+    assert!(out.contains("if x > 0 {"), "missing if branch:\n{out}");
+    assert!(out.contains("} else if x == 0 {"), "missing elsif branch:\n{out}");
+    assert!(out.contains("} else {"), "missing else branch:\n{out}");
+    assert!(out.contains("return -1;"), "missing else body:\n{out}");
+}
+
+#[test]
 fn declaration_only_function() {
     let out = run_compiler("definitions", "examples/function.asl");
     assert!(out.contains("pub fn Identity(x: i64) -> i64 {"), "missing Identity signature:\n{out}");
