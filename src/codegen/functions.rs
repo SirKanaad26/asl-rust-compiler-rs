@@ -52,7 +52,10 @@ pub fn generate_callable(emitter: &mut CodeEmitter, ctx: &DefCallableContext<'_>
         let block = ctx.indentedBlock().unwrap();
         let stmts = block.stmt_all();
         for stmt in &stmts {
-            generate_stmt(emitter, &stmt);
+            let deferred = generate_stmt(emitter, &stmt);
+            for d in deferred {
+                generate_stmt(emitter, &d);
+            }
         }
         if stmts.is_empty() && rust_ret != "()" {
             emitter.emit("todo!()");

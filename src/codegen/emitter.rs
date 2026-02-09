@@ -1,24 +1,19 @@
 pub struct CodeEmitter {
-    output: String,
+    lines: Vec<String>,
     indent: usize,
 }
 
 impl CodeEmitter {
     pub fn new() -> Self {
         Self {
-            output: String::new(),
+            lines: Vec::new(),
             indent: 0,
         }
     }
 
     pub fn emit(&mut self, line: &str) {
-        self.output.push_str(&"    ".repeat(self.indent));
-        self.output.push_str(line);
-        self.output.push('\n');
-    }
-
-    pub fn emit_raw(&mut self, text: &str) {
-        self.output.push_str(text);
+        let indented = format!("{}{}", "    ".repeat(self.indent), line);
+        self.lines.push(indented);
     }
 
     pub fn indent(&mut self) {
@@ -29,7 +24,11 @@ impl CodeEmitter {
         self.indent = self.indent.saturating_sub(1);
     }
 
-    pub fn output(&self) -> &str {
-        &self.output
+    pub fn output(&self) -> String {
+        let mut result = self.lines.join("\n");
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result
     }
 }
