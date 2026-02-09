@@ -4,7 +4,7 @@
 
 ```bash
 # Clone and enter
-git clone <repo-url>
+git clone https://github.com/SirKanaad26/asl-rust-compiler-rs.git
 cd asl-rust-compiler-rs
 
 # Build
