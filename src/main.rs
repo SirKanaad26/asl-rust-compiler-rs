@@ -76,6 +76,9 @@ fn main() {
                     DefinitionContextAll::DefVariableContext(ctx) => {
                         codegen::types::generate_variable(&mut emitter, ctx);
                     }
+                    DefinitionContextAll::DefArrayContext(ctx) => {
+                        codegen::types::generate_array(&mut emitter, ctx);
+                    }
                     _ => {
                         emitter.emit(&format!("// TODO: {:?}", def.get_text()));
                     }
