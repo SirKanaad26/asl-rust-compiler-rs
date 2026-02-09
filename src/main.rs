@@ -59,7 +59,7 @@ fn main() {
                         codegen::types::generate_builtin_type(&mut emitter, ctx);
                     }
                     DefinitionContextAll::DefConstantContext(ctx) => {
-                        codegen::types::generate_constant(&mut emitter, ctx);
+                        codegen::variables::generate_constant(&mut emitter, ctx);
                     }
                     DefinitionContextAll::DefTypeAbstractContext(ctx) => {
                         codegen::types::generate_abstract_type(&mut emitter, ctx);
@@ -74,10 +74,10 @@ fn main() {
                         codegen::types::generate_struct(&mut emitter, ctx);
                     }
                     DefinitionContextAll::DefVariableContext(ctx) => {
-                        codegen::types::generate_variable(&mut emitter, ctx);
+                        codegen::variables::generate_variable(&mut emitter, ctx);
                     }
                     DefinitionContextAll::DefArrayContext(ctx) => {
-                        codegen::types::generate_array(&mut emitter, ctx);
+                        codegen::variables::generate_array(&mut emitter, ctx);
                     }
                     _ => {
                         emitter.emit(&format!("// TODO: {:?}", def.get_text()));
