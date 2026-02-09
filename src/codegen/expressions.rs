@@ -1,0 +1,92 @@
+use std::rc::Rc;
+use antlr_rust::tree::ParseTree;
+use antlr_rust::token::Token;
+
+use crate::parser::aslparser::*;
+
+/// Generate a Rust expression string from an ASL expr node
+pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
+    match expr.as_ref() {
+        ExprContextAll::ExprVarRefContext(ctx) => {
+            ctx.qualId().unwrap().get_text()
+        }
+        ExprContextAll::ExprLitNatContext(ctx) => {
+            ctx.NAT_LIT().unwrap().get_text()
+        }
+        ExprContextAll::ExprLitHexContext(ctx) => {
+            ctx.HEX_LIT().unwrap().get_text()
+        }
+        ExprContextAll::ExprLitRealContext(ctx) => {
+            ctx.REAL_LIT().unwrap().get_text()
+        }
+        ExprContextAll::ExprLitStringContext(ctx) => {
+            ctx.STRING_LIT().unwrap().get_text()
+        }
+        ExprContextAll::ExprBinOpContext(ctx) => {
+            let lhs = generate_expr(ctx.operand1.as_ref().unwrap());
+            let rhs = generate_expr(ctx.operand2.as_ref().unwrap());
+            let op_token = ctx.operator.as_ref().unwrap();
+            let op = map_binop(op_token.get_text());
+            format!("{} {} {}", lhs, op, rhs)
+        }
+        ExprContextAll::ExprUnOpContext(ctx) => {
+            let operand = generate_expr(&ctx.expr().unwrap());
+            let op_token = ctx.operator.as_ref().unwrap();
+            let op = map_unop(op_token.get_text());
+            format!("{}{}", op, operand)
+        }
+        ExprContextAll::ExprParenContext(ctx) => {
+            let inner = generate_expr(&ctx.expr().unwrap());
+            format!("({})", inner)
+        }
+        ExprContextAll::ExprCallContext(ctx) => {
+            let name = ctx.qualId().unwrap().get_text();
+            let args: Vec<String> = ctx.exprCommaList0().unwrap()
+                .expr_all()
+                .iter()
+                .map(|e| generate_expr(e))
+                .collect();
+            format!("{}({})", name, args.join(", "))
+        }
+        _ => {
+            format!("todo!(/* {} */)", expr.get_text())
+        }
+    }
+}
+
+/// Map ASL binary operators to Rust equivalents
+fn map_binop(op: &str) -> &str {
+    match op {
+        "+" => "+",
+        "-" => "-",
+        "*" => "*",
+        "/" => "/",
+        "^" => "^",
+        "==" => "==",
+        "!=" => "!=",
+        ">" => ">",
+        ">=" => ">=",
+        "<" => "<",
+        "<=" => "<=",
+        "&&" => "&&",
+        "||" => "||",
+        "AND" => "&",
+        "OR" => "|",
+        "EOR" => "^",
+        ">>" => ">>",
+        "<<" => "<<",
+        "DIV" => "/",
+        "MOD" => "%",
+        other => other,
+    }
+}
+
+/// Map ASL unary operators to Rust equivalents
+fn map_unop(op: &str) -> &str {
+    match op {
+        "-" => "-",
+        "!" => "!",
+        "NOT" => "!",
+        other => other,
+    }
+}

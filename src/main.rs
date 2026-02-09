@@ -79,6 +79,9 @@ fn main() {
                     DefinitionContextAll::DefArrayContext(ctx) => {
                         codegen::variables::generate_array(&mut emitter, ctx);
                     }
+                    DefinitionContextAll::DefCallableContext(ctx) => {
+                        codegen::functions::generate_callable(&mut emitter, ctx);
+                    }
                     _ => {
                         emitter.emit(&format!("// TODO: {:?}", def.get_text()));
                     }
