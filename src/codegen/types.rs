@@ -42,6 +42,30 @@ pub fn map_type(type_ctx: &Rc<TypeSpecContextAll<'_>>) -> String {
     }
 }
 
+/// Return a const-compatible default value for a Rust type string
+fn default_value_for(rust_type: &str) -> String {
+    match rust_type {
+        "i64" => "0".to_string(),
+        "bool" => "false".to_string(),
+        "f64" => "0.0".to_string(),
+        "String" => "String::new()".to_string(),
+        t if t.starts_with('u') && t[1..].parse::<u32>().is_ok() => "0".to_string(),
+        _ => format!("{}::default()", rust_type),
+    }
+}
+
+pub fn generate_variable(emitter: &mut CodeEmitter, ctx: &DefVariableContext<'_>) {
+    let type_spec = ctx.typeSpec().unwrap();
+    let rust_type = map_type(&type_spec);
+    let name = ctx.qualId().unwrap().get_text();
+    let default = default_value_for(&rust_type);
+
+    emitter.emit(&format!(
+        "pub static {}: std::sync::Mutex<{}> = std::sync::Mutex::new({});",
+        name, rust_type, default
+    ));
+}
+
 pub fn generate_builtin_type(emitter: &mut CodeEmitter, ctx: &DefTypeBuiltinContext<'_>) {
     let name = ctx.id().unwrap().get_text();
     emitter.emit(&format!("// builtin: {}", name));

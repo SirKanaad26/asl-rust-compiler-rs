@@ -73,6 +73,9 @@ fn main() {
                     DefinitionContextAll::DefTypeStructContext(ctx) => {
                         codegen::types::generate_struct(&mut emitter, ctx);
                     }
+                    DefinitionContextAll::DefVariableContext(ctx) => {
+                        codegen::types::generate_variable(&mut emitter, ctx);
+                    }
                     _ => {
                         emitter.emit(&format!("// TODO: {:?}", def.get_text()));
                     }
