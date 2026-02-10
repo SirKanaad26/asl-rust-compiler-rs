@@ -194,6 +194,20 @@ fn stmt_stubs() {
     assert!(out.contains("panic!(\"MyError\");"), "missing throw:\n{out}");
 }
 
+// ── Case/When/Otherwise ──
+
+#[test]
+fn case_statement() {
+    let out = run_compiler("definitions", "examples/stmt_case.asl");
+    assert!(out.contains("match opcode {"), "missing match:\n{out}");
+    assert!(out.contains("0 => {"), "missing when 0 arm:\n{out}");
+    assert!(out.contains("1 | 2 => {"), "missing when 1,2 arm:\n{out}");
+    assert!(out.contains("_ => {"), "missing otherwise arm:\n{out}");
+    assert!(out.contains("result = 100;"), "missing first arm body:\n{out}");
+    assert!(out.contains("result = 999;"), "missing otherwise body:\n{out}");
+    assert!(out.contains("    return result;"), "return should be outside match:\n{out}");
+}
+
 // ── Registers ──
 
 #[test]

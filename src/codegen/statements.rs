@@ -72,6 +72,9 @@ pub fn generate_stmt<'a>(
         StmtContextAll::StmtForContext(ctx) => {
             generate_for_stmt(emitter, ctx)
         }
+        StmtContextAll::StmtCaseContext(ctx) => {
+            generate_case_stmt(emitter, ctx)
+        }
         _ => {
             emitter.emit(&format!("// TODO stmt: {}", stmt.get_text()));
             vec![]
@@ -246,5 +249,115 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
         _ => {
             emitter.emit(&format!("// TODO: {}", stmt.get_text()));
         }
+    }
+}
+
+fn generate_case_stmt<'a>(
+    emitter: &mut CodeEmitter,
+    ctx: &StmtCaseContext<'a>,
+) -> Vec<Rc<StmtContextAll<'a>>> {
+    let case_col = ctx.start().get_column();
+    let test = generate_expr(&ctx.expr().unwrap());
+    emitter.emit(&format!("match {} {{", test));
+    emitter.indent();
+
+    let mut deferred: Vec<Rc<StmtContextAll<'a>>> = Vec::new();
+
+    for alt in ctx.caseAlt_all() {
+        match alt.as_ref() {
+            CaseAltContextAll::CaseAltWhenContext(when_ctx) => {
+                let patterns: Vec<String> = when_ctx
+                    .casePattern_all()
+                    .iter()
+                    .map(|p| generate_case_pattern(p))
+                    .collect();
+                let combined = patterns.join(" | ");
+
+                let arm = match when_ctx.expr() {
+                    Some(guard) => format!("{} if {} => {{", combined, generate_expr(&guard)),
+                    None => format!("{} => {{", combined),
+                };
+                emitter.emit(&arm);
+                emitter.indent();
+                if let Some(embed0) = when_ctx.blockOrEmbed0() {
+                    deferred.extend(generate_case_alt_body(emitter, &embed0, case_col));
+                }
+                emitter.dedent();
+                emitter.emit("}");
+            }
+            CaseAltContextAll::CaseAltOtherwiseContext(ow_ctx) => {
+                emitter.emit("_ => {");
+                emitter.indent();
+                if let Some(embed0) = ow_ctx.blockOrEmbed0() {
+                    deferred.extend(generate_case_alt_body(emitter, &embed0, case_col));
+                }
+                emitter.dedent();
+                emitter.emit("}");
+            }
+            _ => {
+                emitter.emit("// TODO: unknown case alt");
+            }
+        }
+    }
+
+    emitter.dedent();
+    emitter.emit("}");
+
+    deferred
+}
+
+fn generate_case_alt_body<'a>(
+    emitter: &mut CodeEmitter,
+    embed0: &Rc<BlockOrEmbed0ContextAll<'a>>,
+    case_col: isize,
+) -> Vec<Rc<StmtContextAll<'a>>> {
+    match embed0.blockOrEmbed1() {
+        Some(embed1) => match embed1.as_ref() {
+            BlockOrEmbed1ContextAll::BlockIndentContext(ctx) => {
+                match ctx.indentedBlock() {
+                    Some(block) => generate_indented_block_split(emitter, &block, case_col),
+                    None => vec![],
+                }
+            }
+            _ => {
+                generate_block_or_embed1(emitter, &embed1);
+                vec![]
+            }
+        },
+        None => vec![],
+    }
+}
+
+fn generate_case_pattern(pat: &Rc<CasePatternContextAll<'_>>) -> String {
+    match pat.as_ref() {
+        CasePatternContextAll::CasePatternNatContext(ctx) => {
+            ctx.NAT_LIT().unwrap().get_text()
+        }
+        CasePatternContextAll::CasePatternHexContext(ctx) => {
+            ctx.HEX_LIT().unwrap().get_text()
+        }
+        CasePatternContextAll::CasePatternBinContext(ctx) => {
+            let raw = ctx.BIN_LIT().unwrap().get_text();
+            let bits = raw.trim_matches('\'').replace(' ', "");
+            format!("0b{}", bits)
+        }
+        CasePatternContextAll::CasePatternMaskContext(ctx) => {
+            format!("todo!(\"mask pattern: {}\")", ctx.MASK_LIT().unwrap().get_text())
+        }
+        CasePatternContextAll::CasePatternBindContext(ctx) => {
+            ctx.id().unwrap().get_text()
+        }
+        CasePatternContextAll::CasePatternIgnoreContext(_) => {
+            "_".to_string()
+        }
+        CasePatternContextAll::CasePatternTupleContext(ctx) => {
+            let inner: Vec<String> = ctx
+                .casePattern_all()
+                .iter()
+                .map(|p| generate_case_pattern(p))
+                .collect();
+            format!("({})", inner.join(", "))
+        }
+        _ => "todo!(\"unknown pattern\")".to_string(),
     }
 }
