@@ -246,6 +246,22 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             let id = ctx.id().unwrap().get_text();
             emitter.emit(&format!("panic!(\"{}\");", id));
         }
+        InlineStmtContextAll::StmtRepeatContext(ctx) => {
+            emitter.emit("loop {");
+            emitter.indent();
+            if let Some(block) = ctx.indentedBlock() {
+                for stmt in block.stmt_all() {
+                    let deferred = generate_stmt(emitter, &stmt);
+                    for d in deferred {
+                        generate_stmt(emitter, &d);
+                    }
+                }
+            }
+            let cond = generate_expr(&ctx.expr().unwrap());
+            emitter.emit(&format!("if {} {{ break; }}", cond));
+            emitter.dedent();
+            emitter.emit("}");
+        }
         _ => {
             emitter.emit(&format!("// TODO: {}", stmt.get_text()));
         }

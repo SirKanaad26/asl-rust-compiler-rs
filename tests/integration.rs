@@ -202,6 +202,17 @@ fn stmt_stubs() {
     assert!(out.contains("panic!(\"MyError\");"), "missing throw:\n{out}");
 }
 
+// ── Repeat/Until ──
+
+#[test]
+fn repeat_until_statement() {
+    let out = run_compiler("definitions", "examples/stmt_repeat.asl");
+    assert!(out.contains("loop {"), "missing loop:\n{out}");
+    assert!(out.contains("n = n - 1;"), "missing loop body:\n{out}");
+    assert!(out.contains("if n == 0 { break; }"), "missing until break:\n{out}");
+    assert!(out.contains("    return n;"), "return should be outside loop:\n{out}");
+}
+
 // ── Case/When/Otherwise ──
 
 #[test]
