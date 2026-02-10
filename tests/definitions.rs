@@ -33,6 +33,14 @@ fn abstract_type() {
     assert!(out.contains("pub struct"), "expected struct decl, got:\n{out}");
 }
 
+// ── Type Mapping ──
+
+#[test]
+fn type_array() {
+    let out = run_compiler("definitions", "examples/type_array.asl");
+    assert!(out.contains("[i64; 7 - 0 + 1]"), "missing array type mapping:\n{out}");
+}
+
 // ── Variables ──
 
 #[test]

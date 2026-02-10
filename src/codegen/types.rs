@@ -2,6 +2,7 @@ use std::rc::Rc;
 use antlr_rust::tree::ParseTree;
 
 use crate::codegen::emitter::CodeEmitter;
+use crate::codegen::expressions::generate_expr;
 use crate::parser::aslparser::*;
 
 /// Map an ASL type name to a Rust type
@@ -37,6 +38,23 @@ pub fn map_type(type_ctx: &Rc<TypeSpecContextAll<'_>>) -> String {
             } else {
                 text
             }
+        }
+        TypeSpecContextAll::TypeArrayContext(ctx) => {
+            let elem_type = map_type(&ctx.typeSpec().unwrap());
+            match ctx.ixType().unwrap().as_ref() {
+                IxTypeContextAll::IxTypeRangeContext(range) => {
+                    let begin = generate_expr(range.begin.as_ref().unwrap());
+                    let end = generate_expr(range.end.as_ref().unwrap());
+                    format!("[{}; {} - {} + 1]", elem_type, end, begin)
+                }
+                IxTypeContextAll::IxTypeRefContext(ref_ctx) => {
+                    format!("[{}; {}]", elem_type, ref_ctx.get_text())
+                }
+                _ => format!("[{}]", elem_type),
+            }
+        }
+        TypeSpecContextAll::TypeOfContext(_) => {
+            "todo!(\"typeof\")".to_string()
         }
         _ => type_ctx.get_text(),
     }
