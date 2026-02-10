@@ -48,6 +48,11 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
                 .collect();
             format!("{}({})", name, args.join(", "))
         }
+        ExprContextAll::ExprMemberContext(ctx) => {
+            let obj = generate_expr(&ctx.expr().unwrap());
+            let field = ctx.id().unwrap().get_text();
+            format!("{}.{}", obj, field)
+        }
         _ => {
             format!("todo!(/* {} */)", expr.get_text())
         }

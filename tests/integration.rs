@@ -146,6 +146,14 @@ fn declaration_only_function() {
     assert!(out.contains("todo!()"), "missing todo!() placeholder:\n{out}");
 }
 
+// ── Expressions ──
+
+#[test]
+fn expr_member_access() {
+    let out = run_compiler("definitions", "examples/expr_member.asl");
+    assert!(out.contains("a.x + b.x"), "missing member access expr:\n{out}");
+}
+
 // ── Registers ──
 
 #[test]
