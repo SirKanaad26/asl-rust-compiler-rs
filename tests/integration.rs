@@ -167,6 +167,12 @@ fn expr_bit_slice() {
     assert!(out.contains("((x >> n) & 1)"), "missing single bit slice:\n{out}");
 }
 
+#[test]
+fn expr_tuple() {
+    let out = run_compiler("definitions", "examples/expr_tuple.asl");
+    assert!(out.contains("(b, a)"), "missing tuple expr:\n{out}");
+}
+
 // ── Inline declarations & boolean literals ──
 
 #[test]

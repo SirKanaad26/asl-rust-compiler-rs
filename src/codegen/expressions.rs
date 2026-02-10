@@ -77,6 +77,14 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
             let field = ctx.id().unwrap().get_text();
             format!("{}.{}", obj, field)
         }
+        ExprContextAll::ExprTupleContext(ctx) => {
+            let elems: Vec<String> = ctx.exprCommaList1().unwrap()
+                .expr_all()
+                .iter()
+                .map(|e| generate_expr(e))
+                .collect();
+            format!("({})", elems.join(", "))
+        }
         ExprContextAll::ExprUnknownContext(_) => {
             "Default::default()".to_string()
         }
