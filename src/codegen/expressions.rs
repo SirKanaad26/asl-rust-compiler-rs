@@ -48,6 +48,15 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
                 .collect();
             format!("{}({})", name, args.join(", "))
         }
+        ExprContextAll::ExprIndexContext(ctx) => {
+            let obj = generate_expr(&ctx.expr().unwrap());
+            let slices: Vec<String> = ctx.sliceCommaList0().unwrap()
+                .slice_all()
+                .iter()
+                .map(|s| generate_slice(s))
+                .collect();
+            format!("{}[{}]", obj, slices.join(", "))
+        }
         ExprContextAll::ExprMemberContext(ctx) => {
             let obj = generate_expr(&ctx.expr().unwrap());
             let field = ctx.id().unwrap().get_text();
@@ -108,6 +117,18 @@ fn map_binop(op: &str) -> &str {
         "DIV" => "/",
         "MOD" => "%",
         other => other,
+    }
+}
+
+/// Generate a Rust expression from an ASL slice node
+fn generate_slice(slice: &Rc<SliceContextAll<'_>>) -> String {
+    match slice.as_ref() {
+        SliceContextAll::SliceSingleContext(ctx) => {
+            generate_expr(&ctx.expr().unwrap())
+        }
+        _ => {
+            slice.get_text()
+        }
     }
 }
 

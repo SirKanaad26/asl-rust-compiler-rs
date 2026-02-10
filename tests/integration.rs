@@ -154,6 +154,12 @@ fn expr_member_access() {
     assert!(out.contains("a.x + b.x"), "missing member access expr:\n{out}");
 }
 
+#[test]
+fn expr_array_index() {
+    let out = run_compiler("definitions", "examples/expr_index.asl");
+    assert!(out.contains("arr[i]"), "missing array index expr:\n{out}");
+}
+
 // ── Registers ──
 
 #[test]
