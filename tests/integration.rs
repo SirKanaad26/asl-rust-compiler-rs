@@ -177,6 +177,17 @@ fn inline_var_decl_and_bool_literals() {
     assert!(out.contains("return false;"), "missing FALSE -> false mapping:\n{out}");
 }
 
+// ── Stubs ──
+
+#[test]
+fn stmt_stubs() {
+    let out = run_compiler("definitions", "examples/stubs.asl");
+    assert!(out.contains("panic!(\"UNPREDICTABLE\");"), "missing UNPREDICTABLE:\n{out}");
+    assert!(out.contains("panic!(\"UNDEFINED\");"), "missing UNDEFINED:\n{out}");
+    assert!(out.contains("panic!(\"IMPLEMENTATION_DEFINED\");"), "missing IMPLEMENTATION_DEFINED:\n{out}");
+    assert!(out.contains("panic!(\"MyError\");"), "missing throw:\n{out}");
+}
+
 // ── Registers ──
 
 #[test]

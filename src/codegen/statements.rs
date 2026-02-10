@@ -226,6 +226,23 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             let val = generate_expr(&ctx.expr().unwrap());
             emitter.emit(&format!("let {}: {} = {};", name, ty, val));
         }
+        InlineStmtContextAll::StmtUnpredictableContext(_) => {
+            emitter.emit("panic!(\"UNPREDICTABLE\");");
+        }
+        InlineStmtContextAll::StmtUndefinedContext(_) => {
+            emitter.emit("panic!(\"UNDEFINED\");");
+        }
+        InlineStmtContextAll::StmtImpDefContext(_) => {
+            emitter.emit("panic!(\"IMPLEMENTATION_DEFINED\");");
+        }
+        InlineStmtContextAll::StmtSeeContext(ctx) => {
+            let see_text = ctx.SEE_TOK().map(|t| t.get_text()).unwrap_or_default();
+            emitter.emit(&format!("panic!(\"SEE {}\");", see_text));
+        }
+        InlineStmtContextAll::StmtThrowContext(ctx) => {
+            let id = ctx.id().unwrap().get_text();
+            emitter.emit(&format!("panic!(\"{}\");", id));
+        }
         _ => {
             emitter.emit(&format!("// TODO: {}", stmt.get_text()));
         }

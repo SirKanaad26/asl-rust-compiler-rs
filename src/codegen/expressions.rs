@@ -77,6 +77,12 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
             let field = ctx.id().unwrap().get_text();
             format!("{}.{}", obj, field)
         }
+        ExprContextAll::ExprUnknownContext(_) => {
+            "Default::default()".to_string()
+        }
+        ExprContextAll::ExprImpDefContext(_) => {
+            "panic!(\"IMPLEMENTATION_DEFINED\")".to_string()
+        }
         _ => {
             format!("todo!(/* {} */)", expr.get_text())
         }
