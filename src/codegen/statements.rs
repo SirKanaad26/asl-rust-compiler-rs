@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use crate::codegen::emitter::CodeEmitter;
 use crate::codegen::expressions::{generate_expr, generate_lval};
+use crate::codegen::types::map_type;
 use crate::parser::aslparser::*;
 
 /// Get the source column of a statement's first token.
@@ -210,6 +211,20 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
         InlineStmtContextAll::StmtAssertContext(ctx) => {
             let cond = generate_expr(&ctx.expr().unwrap());
             emitter.emit(&format!("assert!({});", cond));
+        }
+        InlineStmtContextAll::StmtVarDeclInitContext(ctx) => {
+            let sym = ctx.symDecl().unwrap();
+            let ty = map_type(&sym.typeSpec().unwrap());
+            let name = sym.id().unwrap().get_text();
+            let val = generate_expr(&ctx.expr().unwrap());
+            emitter.emit(&format!("let mut {}: {} = {};", name, ty, val));
+        }
+        InlineStmtContextAll::StmtConstDeclContext(ctx) => {
+            let sym = ctx.symDecl().unwrap();
+            let ty = map_type(&sym.typeSpec().unwrap());
+            let name = sym.id().unwrap().get_text();
+            let val = generate_expr(&ctx.expr().unwrap());
+            emitter.emit(&format!("let {}: {} = {};", name, ty, val));
         }
         _ => {
             emitter.emit(&format!("// TODO: {}", stmt.get_text()));

@@ -48,6 +48,12 @@ pub fn generate_callable(emitter: &mut CodeEmitter, ctx: &DefCallableContext<'_>
 
     emitter.indent();
 
+    // Shadow parameters as mutable (ASL params are mutable by default)
+    for d in &decls {
+        let pname = d.id().unwrap().get_text();
+        emitter.emit(&format!("let mut {} = {};", pname, pname));
+    }
+
     if has_body {
         let block = ctx.indentedBlock().unwrap();
         let stmts = block.stmt_all();

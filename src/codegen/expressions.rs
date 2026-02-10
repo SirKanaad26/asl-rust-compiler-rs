@@ -8,7 +8,12 @@ use crate::parser::aslparser::*;
 pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
     match expr.as_ref() {
         ExprContextAll::ExprVarRefContext(ctx) => {
-            ctx.qualId().unwrap().get_text()
+            let name = ctx.qualId().unwrap().get_text();
+            match name.as_str() {
+                "TRUE" => "true".to_string(),
+                "FALSE" => "false".to_string(),
+                _ => name,
+            }
         }
         ExprContextAll::ExprLitNatContext(ctx) => {
             ctx.NAT_LIT().unwrap().get_text()

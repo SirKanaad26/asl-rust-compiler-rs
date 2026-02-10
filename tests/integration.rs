@@ -167,6 +167,16 @@ fn expr_bit_slice() {
     assert!(out.contains("((x >> n) & 1)"), "missing single bit slice:\n{out}");
 }
 
+// ── Inline declarations & boolean literals ──
+
+#[test]
+fn inline_var_decl_and_bool_literals() {
+    let out = run_compiler("definitions", "examples/leetcode_palindrome.asl");
+    assert!(out.contains("let mut original: i64 = x;"), "missing var decl with init:\n{out}");
+    assert!(out.contains("let mut reversed: i64 = 0;"), "missing var decl with zero init:\n{out}");
+    assert!(out.contains("return false;"), "missing FALSE -> false mapping:\n{out}");
+}
+
 // ── Registers ──
 
 #[test]
