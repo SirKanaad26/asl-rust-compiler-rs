@@ -57,6 +57,16 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
                 .collect();
             format!("{}[{}]", obj, slices.join(", "))
         }
+        ExprContextAll::ExprSliceContext(ctx) => {
+            let obj = generate_expr(&ctx.expr().unwrap());
+            let slices = ctx.sliceCommaList1().unwrap().slice_all();
+            if slices.len() == 1 {
+                generate_bit_slice(&obj, &slices[0])
+            } else {
+                format!("todo!(/* bit slice: {}<{}> */)", obj,
+                    slices.iter().map(|s| s.get_text()).collect::<Vec<_>>().join(", "))
+            }
+        }
         ExprContextAll::ExprMemberContext(ctx) => {
             let obj = generate_expr(&ctx.expr().unwrap());
             let field = ctx.id().unwrap().get_text();
@@ -117,6 +127,29 @@ fn map_binop(op: &str) -> &str {
         "DIV" => "/",
         "MOD" => "%",
         other => other,
+    }
+}
+
+/// Generate a Rust bit-extraction expression from an ASL bit slice
+fn generate_bit_slice(obj: &str, slice: &Rc<SliceContextAll<'_>>) -> String {
+    match slice.as_ref() {
+        SliceContextAll::SliceSingleContext(ctx) => {
+            let bit = generate_expr(&ctx.expr().unwrap());
+            format!("(({} >> {}) & 1)", obj, bit)
+        }
+        SliceContextAll::SliceRangeContext(ctx) => {
+            let hi = ctx.begin.as_ref().unwrap().get_text();
+            let lo = ctx.end.as_ref().unwrap().get_text();
+            format!("(({} >> {}) & ((1 << ({} - {} + 1)) - 1))", obj, lo, hi, lo)
+        }
+        SliceContextAll::SliceOffsetContext(ctx) => {
+            let base = ctx.sliceBase.as_ref().unwrap().get_text();
+            let count = ctx.count.as_ref().unwrap().get_text();
+            format!("(({} >> {}) & ((1 << {}) - 1))", obj, base, count)
+        }
+        _ => {
+            format!("todo!(/* bit slice: {}<{}> */)", obj, slice.get_text())
+        }
     }
 }
 

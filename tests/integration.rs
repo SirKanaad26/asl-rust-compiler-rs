@@ -160,6 +160,13 @@ fn expr_array_index() {
     assert!(out.contains("arr[i]"), "missing array index expr:\n{out}");
 }
 
+#[test]
+fn expr_bit_slice() {
+    let out = run_compiler("definitions", "examples/expr_slice.asl");
+    assert!(out.contains("((x >> 0) & ((1 << (7 - 0 + 1)) - 1))"), "missing range bit slice:\n{out}");
+    assert!(out.contains("((x >> n) & 1)"), "missing single bit slice:\n{out}");
+}
+
 // ── Registers ──
 
 #[test]
