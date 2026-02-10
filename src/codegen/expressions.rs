@@ -91,6 +91,22 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
         ExprContextAll::ExprImpDefContext(_) => {
             "panic!(\"IMPLEMENTATION_DEFINED\")".to_string()
         }
+        ExprContextAll::ExprIfContext(ctx) => {
+            let cond = generate_expr(ctx.test.as_ref().unwrap());
+            let then_expr = generate_expr(ctx.thenExpr.as_ref().unwrap());
+            let else_expr = generate_expr(ctx.elseExpr.as_ref().unwrap());
+
+            let mut result = format!("if {} {{ {} }}", cond, then_expr);
+
+            for elsif in ctx.exprElsIf_all() {
+                let elsif_cond = generate_expr(elsif.test.as_ref().unwrap());
+                let elsif_result = generate_expr(elsif.result.as_ref().unwrap());
+                result.push_str(&format!(" else if {} {{ {} }}", elsif_cond, elsif_result));
+            }
+
+            result.push_str(&format!(" else {{ {} }}", else_expr));
+            result
+        }
         _ => {
             format!("todo!(/* {} */)", expr.get_text())
         }

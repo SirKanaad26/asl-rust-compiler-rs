@@ -173,6 +173,14 @@ fn expr_tuple() {
     assert!(out.contains("(b, a)"), "missing tuple expr:\n{out}");
 }
 
+// ── If Expression ──
+
+#[test]
+fn expr_if() {
+    let out = run_compiler("definitions", "examples/expr_if.asl");
+    assert!(out.contains("if x > 0 { x } else { -x }"), "missing if expression:\n{out}");
+}
+
 // ── Inline declarations & boolean literals ──
 
 #[test]
