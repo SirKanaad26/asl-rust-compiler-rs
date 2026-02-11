@@ -265,6 +265,13 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             emitter.dedent();
             emitter.emit("}");
         }
+        InlineStmtContextAll::StmtDefEnumContext(ctx) => {
+            let name = ctx.id().unwrap().get_text();
+            let variants = ctx.identifierCommaList0().unwrap();
+            let ids: Vec<String> = variants.id_all().iter().map(|id| id.get_text()).collect();
+            emitter.emit("#[derive(Debug, Clone, Copy, PartialEq)]");
+            emitter.emit(&format!("enum {} {{ {} }}", name, ids.join(", ")));
+        }
         _ => {
             emitter.emit(&format!("// TODO: {}", stmt.get_text()));
         }

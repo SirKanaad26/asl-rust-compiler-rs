@@ -69,6 +69,13 @@ fn try_catch_statement() {
 }
 
 #[test]
+fn inline_enum() {
+    let out = run_compiler("definitions", "examples/stmt_inline_enum.asl");
+    assert!(out.contains("enum Direction { Up, Down, Left, Right }"), "missing inline enum:\n{out}");
+    assert!(out.contains("#[derive(Debug, Clone, Copy, PartialEq)]"), "missing derive:\n{out}");
+}
+
+#[test]
 fn stmt_stubs() {
     let out = run_compiler("definitions", "examples/stubs.asl");
     assert!(out.contains("panic!(\"UNPREDICTABLE\");"), "missing UNPREDICTABLE:\n{out}");
