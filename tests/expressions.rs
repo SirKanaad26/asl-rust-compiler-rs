@@ -31,3 +31,15 @@ fn expr_if() {
     let out = run_compiler("definitions", "examples/expr_if.asl");
     assert!(out.contains("if x > 0 { x } else { -x }"), "missing if expression:\n{out}");
 }
+
+#[test]
+fn expr_concat() {
+    let out = run_compiler("definitions", "examples/expr_concat.asl");
+    assert!(out.contains("concat_bits(hi, lo)"), "missing concat expression:\n{out}");
+}
+
+#[test]
+fn lval_tuple() {
+    let out = run_compiler("definitions", "examples/lval_tuple.asl");
+    assert!(out.contains("(a, b) = (b, a);"), "missing tuple lvalue:\n{out}");
+}

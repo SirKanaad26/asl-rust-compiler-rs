@@ -30,9 +30,14 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
         ExprContextAll::ExprBinOpContext(ctx) => {
             let lhs = generate_expr(ctx.operand1.as_ref().unwrap());
             let rhs = generate_expr(ctx.operand2.as_ref().unwrap());
-            let op_token = ctx.operator.as_ref().unwrap();
-            let op = map_binop(op_token.get_text());
-            format!("{} {} {}", lhs, op, rhs)
+            let op_text = ctx.operator.as_ref().unwrap().get_text();
+            match &*op_text {
+                "++" | ":" => format!("concat_bits({}, {})", lhs, rhs),
+                _ => {
+                    let op = map_binop(&op_text);
+                    format!("{} {} {}", lhs, op, rhs)
+                }
+            }
         }
         ExprContextAll::ExprUnOpContext(ctx) => {
             let operand = generate_expr(&ctx.expr().unwrap());
@@ -132,6 +137,33 @@ pub fn generate_lval(lval: &Rc<LValExprContextAll<'_>>) -> String {
                 .collect();
             format!("{}[{}]", obj, slices.join(", "))
         }
+        LValExprContextAll::LValIgnoreContext(_) => {
+            "_".to_string()
+        }
+        LValExprContextAll::LValTupleContext(ctx) => {
+            let elems: Vec<String> = ctx.lValExpr_all()
+                .iter()
+                .map(|e| generate_lval(e))
+                .collect();
+            format!("({})", elems.join(", "))
+        }
+        LValExprContextAll::LValSliceOfContext(ctx) => {
+            let obj = generate_lval(&ctx.lValExpr().unwrap());
+            let slices = ctx.sliceCommaList1().unwrap().slice_all();
+            if slices.len() == 1 {
+                generate_lval_bit_slice(&obj, &slices[0])
+            } else {
+                format!("todo!(/* lval slice: {}<{}> */)", obj,
+                    slices.iter().map(|s| s.get_text()).collect::<Vec<_>>().join(", "))
+            }
+        }
+        LValExprContextAll::LValSliceContext(ctx) => {
+            let elems: Vec<String> = ctx.lValExpr_all()
+                .iter()
+                .map(|e| generate_lval(e))
+                .collect();
+            format!("<{}>", elems.join(", "))
+        }
         _ => {
             format!("todo!(/* lval: {} */)", lval.get_text())
         }
@@ -196,6 +228,25 @@ fn generate_slice(slice: &Rc<SliceContextAll<'_>>) -> String {
         }
         _ => {
             slice.get_text()
+        }
+    }
+}
+
+/// Generate a Rust lvalue bit-slice assignment target.
+/// For `x<hi:lo> = val`, Rust needs a helper; we emit `set_bits(&mut x, lo, hi, val)`.
+fn generate_lval_bit_slice(obj: &str, slice: &Rc<SliceContextAll<'_>>) -> String {
+    match slice.as_ref() {
+        SliceContextAll::SliceSingleContext(ctx) => {
+            let bit = generate_expr(&ctx.expr().unwrap());
+            format!("set_bit({}, {})", obj, bit)
+        }
+        SliceContextAll::SliceRangeContext(ctx) => {
+            let hi = ctx.begin.as_ref().unwrap().get_text();
+            let lo = ctx.end.as_ref().unwrap().get_text();
+            format!("set_bits({}, {}, {})", obj, lo, hi)
+        }
+        _ => {
+            format!("todo!(/* lval bit slice: {}<{}> */)", obj, slice.get_text())
         }
     }
 }
