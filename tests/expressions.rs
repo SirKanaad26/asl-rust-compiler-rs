@@ -39,6 +39,12 @@ fn expr_concat() {
 }
 
 #[test]
+fn expr_in_set() {
+    let out = run_compiler("definitions", "examples/expr_in.asl");
+    assert!(out.contains("[0, 1, 5].contains(&opcode)"), "missing IN set expr:\n{out}");
+}
+
+#[test]
 fn lval_tuple() {
     let out = run_compiler("definitions", "examples/lval_tuple.asl");
     assert!(out.contains("(a, b) = (b, a);"), "missing tuple lvalue:\n{out}");

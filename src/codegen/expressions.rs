@@ -96,6 +96,44 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
         ExprContextAll::ExprImpDefContext(_) => {
             "panic!(\"IMPLEMENTATION_DEFINED\")".to_string()
         }
+        ExprContextAll::ExprInSetContext(ctx) => {
+            let val = generate_expr(&ctx.expr().unwrap());
+            let elements = ctx.set().unwrap().setElement_all();
+            let all_single = elements.iter().all(|el| {
+                matches!(el.as_ref(), SetElementContextAll::SetElementSingleContext(_))
+            });
+            if all_single {
+                let vals: Vec<String> = elements.iter().map(|el| {
+                    if let SetElementContextAll::SetElementSingleContext(single) = el.as_ref() {
+                        generate_expr(&single.expr().unwrap())
+                    } else {
+                        unreachable!()
+                    }
+                }).collect();
+                format!("[{}].contains(&{})", vals.join(", "), val)
+            } else {
+                let checks: Vec<String> = elements.iter().map(|el| {
+                    match el.as_ref() {
+                        SetElementContextAll::SetElementSingleContext(single) => {
+                            let elem = generate_expr(&single.expr().unwrap());
+                            format!("{} == {}", val, elem)
+                        }
+                        SetElementContextAll::SetElementRangeContext(range) => {
+                            let begin = generate_expr(range.begin.as_ref().unwrap());
+                            let end = generate_expr(range.end.as_ref().unwrap());
+                            format!("({}..={}).contains(&{})", begin, end, val)
+                        }
+                        _ => format!("todo!(/* set element */)")
+                    }
+                }).collect();
+                format!("({})", checks.join(" || "))
+            }
+        }
+        ExprContextAll::ExprInMaskContext(ctx) => {
+            let val = generate_expr(&ctx.expr().unwrap());
+            let mask = ctx.MASK_LIT().unwrap().get_text();
+            format!("in_mask({}, {})", val, mask)
+        }
         ExprContextAll::ExprIfContext(ctx) => {
             let cond = generate_expr(ctx.test.as_ref().unwrap());
             let then_expr = generate_expr(ctx.thenExpr.as_ref().unwrap());
@@ -163,6 +201,15 @@ pub fn generate_lval(lval: &Rc<LValExprContextAll<'_>>) -> String {
                 .map(|e| generate_lval(e))
                 .collect();
             format!("<{}>", elems.join(", "))
+        }
+        LValExprContextAll::LValMemberBitsContext(ctx) => {
+            let obj = generate_lval(&ctx.lValExpr().unwrap());
+            let fields: Vec<String> = ctx.identifierCommaList1().unwrap()
+                .id_all()
+                .iter()
+                .map(|id| id.get_text())
+                .collect();
+            format!("{}.<{}>", obj, fields.join(", "))
         }
         _ => {
             format!("todo!(/* lval: {} */)", lval.get_text())
