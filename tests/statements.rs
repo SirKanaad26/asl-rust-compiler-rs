@@ -56,6 +56,19 @@ fn case_statement() {
 }
 
 #[test]
+fn try_catch_statement() {
+    let out = run_compiler("definitions", "examples/stmt_try.asl");
+    assert!(out.contains("catch_unwind"), "missing catch_unwind:\n{out}");
+    assert!(out.contains("AssertUnwindSafe"), "missing AssertUnwindSafe:\n{out}");
+    assert!(out.contains("downcast_ref::<&str>()"), "missing &str downcast:\n{out}");
+    assert!(out.contains("downcast_ref::<String>()"), "missing String downcast:\n{out}");
+    assert!(out.contains("if e == \"NegativeError\" {"), "missing when clause:\n{out}");
+    assert!(out.contains("} else {"), "missing otherwise clause:\n{out}");
+    assert!(out.contains("result = -1;"), "missing when handler body:\n{out}");
+    assert!(out.contains("    return result;"), "return should be outside try/catch:\n{out}");
+}
+
+#[test]
 fn stmt_stubs() {
     let out = run_compiler("definitions", "examples/stubs.asl");
     assert!(out.contains("panic!(\"UNPREDICTABLE\");"), "missing UNPREDICTABLE:\n{out}");

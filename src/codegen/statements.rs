@@ -75,6 +75,9 @@ pub fn generate_stmt<'a>(
         StmtContextAll::StmtCaseContext(ctx) => {
             generate_case_stmt(emitter, ctx)
         }
+        StmtContextAll::StmtTryContext(ctx) => {
+            generate_try_stmt(emitter, ctx)
+        }
         _ => {
             emitter.emit(&format!("// TODO stmt: {}", stmt.get_text()));
             vec![]
@@ -375,5 +378,101 @@ fn generate_case_pattern(pat: &Rc<CasePatternContextAll<'_>>) -> String {
             format!("({})", inner.join(", "))
         }
         _ => "todo!(\"unknown pattern\")".to_string(),
+    }
+}
+
+fn generate_try_stmt<'a>(
+    emitter: &mut CodeEmitter,
+    ctx: &StmtTryContext<'a>,
+) -> Vec<Rc<StmtContextAll<'a>>> {
+    let try_col = ctx.start().get_column();
+    let catch_var = ctx.id().map(|id| id.get_text()).unwrap_or_else(|| "e".to_string());
+
+    // Emit try body wrapped in catch_unwind
+    emitter.emit("let __try_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {");
+    emitter.indent();
+
+    let mut deferred = match ctx.indentedBlock() {
+        Some(block) => generate_indented_block_split(emitter, &block, try_col),
+        None => vec![],
+    };
+
+    emitter.dedent();
+    emitter.emit("}));");
+
+    // Emit catch handlers as if/else-if/else chain
+    emitter.emit("if let Err(__e) = __try_result {");
+    emitter.indent();
+    emitter.emit(&format!(
+        "let {v} = if let Some(s) = __e.downcast_ref::<&str>() {{ s }} else if let Some(s) = __e.downcast_ref::<String>() {{ s.as_str() }} else {{ \"unknown\" }};",
+        v = catch_var
+    ));
+
+    let alts = ctx.catchAlt_all();
+    let mut first_when = true;
+
+    for alt in &alts {
+        match alt.as_ref() {
+            CatchAltContextAll::CatchAltWhenContext(when_ctx) => {
+                let cond = generate_expr(&when_ctx.expr().unwrap());
+                if first_when {
+                    emitter.emit(&format!("if {} {{", cond));
+                    first_when = false;
+                } else {
+                    emitter.emit(&format!("}} else if {} {{", cond));
+                }
+                emitter.indent();
+                if let Some(block) = when_ctx.blockOrEmbed1() {
+                    deferred.extend(generate_catch_alt_body(emitter, &block, try_col));
+                }
+                emitter.dedent();
+            }
+            CatchAltContextAll::CatchAltOtherwiseContext(ow_ctx) => {
+                if first_when {
+                    // otherwise with no preceding when — just emit the body directly
+                    if let Some(block) = ow_ctx.blockOrEmbed1() {
+                        deferred.extend(generate_catch_alt_body(emitter, &block, try_col));
+                    }
+                } else {
+                    emitter.emit("} else {");
+                    emitter.indent();
+                    if let Some(block) = ow_ctx.blockOrEmbed1() {
+                        deferred.extend(generate_catch_alt_body(emitter, &block, try_col));
+                    }
+                    emitter.dedent();
+                }
+            }
+            _ => {
+                emitter.emit("// TODO: unknown catch alt");
+            }
+        }
+    }
+
+    if !first_when {
+        emitter.emit("}");
+    }
+
+    emitter.dedent();
+    emitter.emit("}");
+
+    deferred
+}
+
+fn generate_catch_alt_body<'a>(
+    emitter: &mut CodeEmitter,
+    embed1: &Rc<BlockOrEmbed1ContextAll<'a>>,
+    try_col: isize,
+) -> Vec<Rc<StmtContextAll<'a>>> {
+    match embed1.as_ref() {
+        BlockOrEmbed1ContextAll::BlockIndentContext(ctx) => {
+            match ctx.indentedBlock() {
+                Some(block) => generate_indented_block_split(emitter, &block, try_col),
+                None => vec![],
+            }
+        }
+        _ => {
+            generate_block_or_embed1(emitter, embed1);
+            vec![]
+        }
     }
 }
