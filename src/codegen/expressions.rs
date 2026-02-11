@@ -24,6 +24,16 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
         ExprContextAll::ExprLitRealContext(ctx) => {
             ctx.REAL_LIT().unwrap().get_text()
         }
+        ExprContextAll::ExprLitBinContext(ctx) => {
+            let raw = ctx.BIN_LIT().unwrap().get_text();
+            let bits = raw.trim_matches('\'').replace(' ', "");
+            format!("0b{}", bits)
+        }
+        ExprContextAll::ExprLitMaskContext(ctx) => {
+            let raw = ctx.MASK_LIT().unwrap().get_text();
+            let mask = raw.trim_matches('\'').replace(' ', "");
+            format!("todo!(/* mask: '{}' */)", mask)
+        }
         ExprContextAll::ExprLitStringContext(ctx) => {
             ctx.STRING_LIT().unwrap().get_text()
         }

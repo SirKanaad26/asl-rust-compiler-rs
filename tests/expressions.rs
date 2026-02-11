@@ -45,6 +45,13 @@ fn expr_in_set() {
 }
 
 #[test]
+fn expr_bin_and_mask_literals() {
+    let out = run_compiler("definitions", "examples/expr_literals.asl");
+    assert!(out.contains("0b10110011"), "missing binary literal:\n{out}");
+    assert!(out.contains("todo!(/* mask: '1x1x0011' */)"), "missing mask literal:\n{out}");
+}
+
+#[test]
 fn lval_tuple() {
     let out = run_compiler("definitions", "examples/lval_tuple.asl");
     assert!(out.contains("(a, b) = (b, a);"), "missing tuple lvalue:\n{out}");
