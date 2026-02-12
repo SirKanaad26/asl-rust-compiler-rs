@@ -64,3 +64,18 @@ fn array_def() {
     assert!(out.contains("Mutex<[u32; 4]>"), "missing regs[0..3]:\n{out}");
     assert!(out.contains("Mutex<[bool; 8]>"), "missing flags[0..7]:\n{out}");
 }
+
+// ── Getters and Setters ──
+
+#[test]
+fn getter_setter() {
+    let out = run_compiler("definitions", "examples/getter_setter.asl");
+    // Simple getter
+    assert!(out.contains("pub fn GetValue(&self) -> i64"), "missing simple getter:\n{out}");
+    // Simple setter
+    assert!(out.contains("pub fn set_SetValue(&mut self, val: i64)"), "missing simple setter:\n{out}");
+    // Indexed getter
+    assert!(out.contains("pub fn GetElement(&self, i: i64) -> i64"), "missing indexed getter:\n{out}");
+    // Indexed setter
+    assert!(out.contains("pub fn set_SetElement(&mut self, idx: i64, val: i64)"), "missing indexed setter:\n{out}");
+}

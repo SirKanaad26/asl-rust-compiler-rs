@@ -82,6 +82,12 @@ fn main() {
                     DefinitionContextAll::DefCallableContext(ctx) => {
                         codegen::functions::generate_callable(&mut emitter, ctx);
                     }
+                    DefinitionContextAll::DefGetterContext(ctx) => {
+                        codegen::functions::generate_getter(&mut emitter, ctx);
+                    }
+                    DefinitionContextAll::DefSetterContext(ctx) => {
+                        codegen::functions::generate_setter(&mut emitter, ctx);
+                    }
                     _ => {
                         emitter.emit(&format!("// TODO: {:?}", def.get_text()));
                     }
