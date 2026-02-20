@@ -1,7 +1,7 @@
 mod parser;
 mod codegen;
 
-use std::{env, fs, path::Path};
+use std::{collections::HashSet, env, fs, path::Path};
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::InputStream;
 
@@ -53,7 +53,16 @@ fn main() {
         }
         "definitions" => {
             let tree = parser.definitions().expect("Parse failed");
+            let mut seen: HashSet<String> = HashSet::new();
             for def in tree.definition_all() {
+                // Skip duplicate definitions (same kind + name).
+                // The real ARM spec redefines the same enum/type multiple times across files.
+                if let Some(key) = def_key(&def) {
+                    if !seen.insert(key.clone()) {
+                        emitter.emit(&format!("// skipped duplicate: {}", key));
+                        continue;
+                    }
+                }
                 match def.as_ref() {
                     DefinitionContextAll::DefTypeBuiltinContext(ctx) => {
                         codegen::types::generate_builtin_type(&mut emitter, ctx);
@@ -115,4 +124,36 @@ fn main() {
         .expect(&format!("Failed to write {}", output_file));
 
     println!("Generated: {}", output_file);
+}
+
+/// Returns a `"kind:name"` key for a definition, used to detect duplicates.
+/// Returns `None` for definitions that have no meaningful unique name.
+fn def_key(def: &DefinitionContextAll) -> Option<String> {
+    use antlr_rust::tree::ParseTree;
+    match def {
+        DefinitionContextAll::DefTypeBuiltinContext(ctx) =>
+            ctx.id().map(|id| format!("builtin:{}", id.get_text())),
+        DefinitionContextAll::DefTypeAbstractContext(ctx) =>
+            ctx.id().map(|id| format!("type:{}", id.get_text())),
+        DefinitionContextAll::DefTypeAliasContext(ctx) =>
+            ctx.id().map(|id| format!("alias:{}", id.get_text())),
+        DefinitionContextAll::DefTypeEnumContext(ctx) =>
+            ctx.id().map(|id| format!("enum:{}", id.get_text())),
+        DefinitionContextAll::DefTypeStructContext(ctx) =>
+            ctx.qualId().map(|q| format!("struct:{}", q.get_text())),
+        DefinitionContextAll::DefConstantContext(ctx) =>
+            ctx.id().map(|id| format!("const:{}", id.get_text())),
+        DefinitionContextAll::DefArrayContext(ctx) =>
+            ctx.id().map(|id| format!("array:{}", id.get_text())),
+        DefinitionContextAll::DefVariableContext(ctx) =>
+            ctx.qualId().map(|q| format!("var:{}", q.get_text())),
+        // Functions/getters/setters are keyed by name — overloads are a separate issue (#24)
+        DefinitionContextAll::DefCallableContext(ctx) =>
+            ctx.qualId().map(|q| format!("fn:{}", q.get_text())),
+        DefinitionContextAll::DefGetterContext(ctx) =>
+            ctx.qualId().map(|q| format!("getter:{}", q.get_text())),
+        DefinitionContextAll::DefSetterContext(ctx) =>
+            ctx.qualId().map(|q| format!("setter:{}", q.get_text())),
+        _ => None,
+    }
 }
