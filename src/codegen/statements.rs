@@ -233,9 +233,15 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             }
         },
         InlineStmtContextAll::StmtAssignContext(ctx) => {
-            let lhs = generate_lval(&ctx.lValExpr().unwrap());
+            let lval = ctx.lValExpr().unwrap();
             let rhs = generate_expr(&ctx.expr().unwrap());
-            emitter.emit(&format!("{} = {};", lhs, rhs));
+            // Special-case register array writes: X[n] = v → set_Xreg(cpu, n, v)
+            if let Some((setter, idx)) = reg_write_setter(&lval) {
+                emitter.emit(&format!("{}(cpu, {}, {});", setter, idx, rhs));
+            } else {
+                let lhs = generate_lval(&lval);
+                emitter.emit(&format!("{} = {};", lhs, rhs));
+            }
         }
         InlineStmtContextAll::StmtAssertContext(ctx) => {
             let cond = generate_expr(&ctx.expr().unwrap());
@@ -491,6 +497,29 @@ fn generate_try_stmt<'a>(
     emitter.emit("}");
 
     deferred
+}
+
+/// If `lval` is a register array write (e.g. `X[n]`, `W[n]`), returns
+/// `(setter_fn_name, index_string)` so the caller can emit `setter(cpu, idx, rhs)`.
+/// Returns `None` for all other lvalues.
+fn reg_write_setter(lval: &Rc<LValExprContextAll<'_>>) -> Option<(String, String)> {
+    if let LValExprContextAll::LValArrayIndexContext(ctx) = lval.as_ref() {
+        let inner = ctx.lValExpr()?;
+        if let LValExprContextAll::LValVarRefContext(vctx) = inner.as_ref() {
+            let name = vctx.qualId()?.get_text();
+            let slices = ctx.slice_all();
+            if slices.len() == 1 {
+                let idx = slices[0].get_text().to_string();
+                let setter = match name.as_str() {
+                    "X" => "set_Xreg",
+                    "W" => "set_Wreg",
+                    _ => return None,
+                };
+                return Some((setter.to_string(), idx));
+            }
+        }
+    }
+    None
 }
 
 fn generate_catch_alt_body<'a>(
