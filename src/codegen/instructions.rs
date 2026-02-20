@@ -4,7 +4,7 @@ use antlr_rust::token::Token;
 
 use crate::codegen::emitter::CodeEmitter;
 use crate::codegen::expressions::generate_expr;
-use crate::codegen::statements::generate_stmt;
+use crate::codegen::statements::{generate_stmt, generate_stmt_in_decode};
 use crate::codegen::types::map_type;
 use crate::parser::aslparser::{
     InstructionContextAll,
@@ -218,12 +218,13 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
             emitter.emit(&format!("if !({}) {{ return None; }}", guard_str));
         }
 
-        // Decode block statements (declare and compute the decode vars)
+        // Decode block statements (declare and compute the decode vars).
+        // UNDEFINED here means the instruction doesn't exist → return None.
         if let Some(block) = &enc.decode {
             for stmt in block.stmt_all() {
-                let deferred = generate_stmt(emitter, &stmt);
+                let deferred = generate_stmt_in_decode(emitter, &stmt);
                 for d in deferred {
-                    generate_stmt(emitter, &d);
+                    generate_stmt_in_decode(emitter, &d);
                 }
             }
         }

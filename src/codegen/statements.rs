@@ -1,6 +1,7 @@
 use antlr_rust::parser_rule_context::ParserRuleContext;
 use antlr_rust::token::Token;
 use antlr_rust::tree::ParseTree;
+use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -8,6 +9,28 @@ use crate::codegen::emitter::CodeEmitter;
 use crate::codegen::expressions::{generate_expr, generate_lval};
 use crate::codegen::types::map_type;
 use crate::parser::aslparser::*;
+
+// Tracks whether the currently-generating statement is inside a __decode block.
+// UNDEFINED in decode means the instruction doesn't exist → return None, not panic.
+thread_local! {
+    static IN_DECODE_CTX: Cell<bool> = Cell::new(false);
+}
+
+fn in_decode_ctx() -> bool {
+    IN_DECODE_CTX.with(|b| b.get())
+}
+
+/// Like `generate_stmt`, but sets the decode context flag so that UNDEFINED
+/// emits `return None` instead of `panic!`.  Use this for __decode block stmts.
+pub fn generate_stmt_in_decode<'a>(
+    emitter: &mut CodeEmitter,
+    stmt: &Rc<StmtContextAll<'a>>,
+) -> Vec<Rc<StmtContextAll<'a>>> {
+    IN_DECODE_CTX.with(|b| b.set(true));
+    let result = generate_stmt(emitter, stmt);
+    IN_DECODE_CTX.with(|b| b.set(false));
+    result
+}
 
 /// Get the source column of a statement's first token.
 fn stmt_col(stmt: &Rc<StmtContextAll<'_>>) -> isize {
@@ -236,7 +259,11 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             emitter.emit("panic!(\"UNPREDICTABLE\");");
         }
         InlineStmtContextAll::StmtUndefinedContext(_) => {
-            emitter.emit("panic!(\"UNDEFINED\");");
+            if in_decode_ctx() {
+                emitter.emit("return None; // UNDEFINED");
+            } else {
+                emitter.emit("panic!(\"UNDEFINED\");");
+            }
         }
         InlineStmtContextAll::StmtImpDefContext(_) => {
             emitter.emit("panic!(\"IMPLEMENTATION_DEFINED\");");
