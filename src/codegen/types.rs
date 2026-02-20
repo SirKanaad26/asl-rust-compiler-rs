@@ -98,6 +98,7 @@ pub fn generate_enum(emitter: &mut CodeEmitter, ctx: &DefTypeEnumContext<'_>) {
     emitter.emit("#[derive(Debug, Clone, Copy, PartialEq)]");
     let variant_list: Vec<String> = ids.iter().map(|id| id.get_text()).collect();
     emitter.emit(&format!("pub enum {} {{ {} }}", name, variant_list.join(", ")));
+    emitter.emit(&format!("pub use {}::*;", name));
 }
 
 pub fn generate_struct(emitter: &mut CodeEmitter, ctx: &DefTypeStructContext<'_>) {
