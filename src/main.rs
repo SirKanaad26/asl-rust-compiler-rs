@@ -2,6 +2,10 @@ mod parser;
 mod codegen;
 
 use std::{collections::HashSet, env, fs, path::Path};
+
+/// The bitvec runtime library source, embedded at compile time.
+/// Written to the output directory alongside any generated instructions file.
+const BITVEC_RS: &str = include_str!("runtime/bitvec.rs");
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::InputStream;
 
@@ -124,6 +128,18 @@ fn main() {
         .expect(&format!("Failed to write {}", output_file));
 
     println!("Generated: {}", output_file);
+
+    // In instructions mode the generated file references `mod bitvec`, so write
+    // bitvec.rs into the same directory as the output file.
+    if mode == "instructions" {
+        let bitvec_path = Path::new(output_file)
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join("bitvec.rs");
+        fs::write(&bitvec_path, BITVEC_RS)
+            .expect("Failed to write bitvec.rs");
+        println!("Generated: {}", bitvec_path.display());
+    }
 }
 
 /// Returns a `"kind:name"` key for a definition, used to detect duplicates.

@@ -25,7 +25,12 @@ use crate::parser::aslparser::{
 /// file compiles without an external runtime crate.  These are approximations —
 /// callers should replace them with correct implementations as needed.
 pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
-    emitter.emit("#![allow(non_snake_case, dead_code, unused_variables, unused_mut)]");
+    // Nightly features required for BitVec<N> const-generic slice/concat.
+    emitter.emit("#![feature(generic_const_exprs)]");
+    emitter.emit("#![allow(incomplete_features, non_snake_case, dead_code, unused_variables, unused_mut, unused_imports)]");
+    emitter.emit("mod bitvec;");
+    emitter.emit("use bitvec::BitVec;");
+    emitter.emit("");
     emitter.emit("// ── ASL built-in runtime stubs ──────────────────────────────────────────────");
     for (sig, body) in &[
         ("fn UInt(x: u64) -> i128",              "x as i128"),
