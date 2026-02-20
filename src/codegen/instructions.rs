@@ -20,6 +20,32 @@ use crate::parser::aslparser::{
     SymDeclContextAttrs,
 };
 
+/// Emit stub implementations of common ASL built-in functions so the generated
+/// file compiles without an external runtime crate.  These are approximations —
+/// callers should replace them with correct implementations as needed.
+pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
+    emitter.emit("#![allow(non_snake_case, dead_code, unused_variables, unused_mut)]");
+    emitter.emit("// ── ASL built-in runtime stubs ──────────────────────────────────────────────");
+    for (sig, body) in &[
+        ("fn UInt(x: u64) -> i64",               "x as i64"),
+        ("fn SInt(x: u64) -> i64",               "x as i64 /* TODO: sign-extend by field width */"),
+        ("fn IsZero(x: u64) -> bool",             "x == 0"),
+        ("fn IsOnes(x: u64) -> bool",             "x == u64::MAX"),
+        ("fn Zeros(_n: u64) -> u64",              "0"),
+        ("fn Ones(n: u64) -> u64",                "if n >= 64 { u64::MAX } else { (1u64 << n) - 1 }"),
+        ("fn ZeroExtend(x: u64, _n: u64) -> u64", "x"),
+        ("fn HaveFP16Ext() -> bool",              "false"),
+        ("fn HaveBF16Ext() -> bool",              "false"),
+        ("fn HaveSVE() -> bool",                  "false"),
+        ("fn HaveSVE2() -> bool",                 "false"),
+        ("fn HaveMTE() -> bool",                  "false"),
+    ] {
+        emitter.emit("#[allow(non_snake_case, dead_code)]");
+        emitter.emit(&format!("pub {} {{ {} }}", sig, body));
+    }
+    emitter.emit("");
+}
+
 /// Scan a decode block for top-level variable declarations, returning (name, rust_type) pairs.
 /// These vars need to be stored in the encoding struct so execute/postdecode can access them.
 fn collect_decode_vars(decode: &Option<Rc<IndentedBlockContextAll<'_>>>) -> Vec<(String, String)> {

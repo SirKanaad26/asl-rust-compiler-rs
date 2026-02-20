@@ -95,6 +95,7 @@ fn main() {
             }
         }
         "instructions" => {
+            codegen::instructions::generate_asl_runtime(&mut emitter);
             let tree = parser.instructions().expect("Parse failed");
             for instr in tree.instruction_all() {
                 codegen::instructions::generate_instruction(&mut emitter, &instr);

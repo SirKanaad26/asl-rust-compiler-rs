@@ -2,6 +2,14 @@ mod common;
 use common::run_compiler;
 
 #[test]
+fn instruction_runtime_stubs() {
+    let out = run_compiler("instructions", "examples/instruction_execute.asl");
+    assert!(out.contains("pub fn UInt(x: u64) -> i64"), "expected UInt stub:\n{out}");
+    assert!(out.contains("pub fn HaveFP16Ext() -> bool"), "expected HaveFP16Ext stub:\n{out}");
+    assert!(out.contains("#![allow(non_snake_case"), "expected allow attr:\n{out}");
+}
+
+#[test]
 fn instruction_execute() {
     let out = run_compiler("instructions", "examples/instruction_execute.asl");
     // Struct includes decode-computed vars
