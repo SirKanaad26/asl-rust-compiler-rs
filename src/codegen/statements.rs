@@ -245,16 +245,19 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
                 let obj = generate_lval(&slice_ctx.lValExpr().unwrap());
                 let slices = slice_ctx.sliceCommaList1().unwrap().slice_all();
                 if slices.len() == 1 {
+                    // BV-6: use AslValue::to_u128() instead of `as u128` so
+                    // BitVec<N> RHS values coerce cleanly (Rust's `as` cast
+                    // does not work on non-primitive types).
                     let stmt = match slices[0].as_ref() {
                         SliceContextAll::SliceSingleContext(sctx) => {
                             let bit = generate_expr(&sctx.expr().unwrap());
-                            format!("{}.set_slice({} as usize, {} as usize, ({}) as u128);",
+                            format!("{}.set_slice({} as usize, {} as usize, AslValue::to_u128({}));",
                                 obj, bit, bit, rhs)
                         }
                         SliceContextAll::SliceRangeContext(rctx) => {
                             let hi = rctx.begin.as_ref().unwrap().get_text();
                             let lo = rctx.end.as_ref().unwrap().get_text();
-                            format!("{}.set_slice({} as usize, {} as usize, ({}) as u128);",
+                            format!("{}.set_slice({} as usize, {} as usize, AslValue::to_u128({}));",
                                 obj, lo, hi, rhs)
                         }
                         _ => format!("// TODO: bit slice write: {}<{}>",
@@ -278,14 +281,25 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             let ty = map_type(&sym.typeSpec().unwrap());
             let name = sym.id().unwrap().get_text();
             let val = generate_expr(&ctx.expr().unwrap());
-            emitter.emit(&format!("let mut {}: {} = {};", name, ty, val));
+            // BV-6: use `BitVec::from_asl(rhs)` — NOT `BitVec<N>::from_asl`.
+            // The let-binding's explicit `BitVec<N>` annotation drives const-
+            // generic N inference; writing `BitVec<N>::` is not valid Rust.
+            if ty.starts_with("BitVec<") {
+                emitter.emit(&format!("let mut {}: {} = BitVec::from_asl({});", name, ty, val));
+            } else {
+                emitter.emit(&format!("let mut {}: {} = {};", name, ty, val));
+            }
         }
         InlineStmtContextAll::StmtConstDeclContext(ctx) => {
             let sym = ctx.symDecl().unwrap();
             let ty = map_type(&sym.typeSpec().unwrap());
             let name = sym.id().unwrap().get_text();
             let val = generate_expr(&ctx.expr().unwrap());
-            emitter.emit(&format!("let {}: {} = {};", name, ty, val));
+            if ty.starts_with("BitVec<") {
+                emitter.emit(&format!("let {}: {} = BitVec::from_asl({});", name, ty, val));
+            } else {
+                emitter.emit(&format!("let {}: {} = {};", name, ty, val));
+            }
         }
         InlineStmtContextAll::StmtUnpredictableContext(_) => {
             emitter.emit("panic!(\"UNPREDICTABLE\");");
@@ -323,6 +337,16 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             emitter.emit(&format!("if {} {{ break; }}", cond));
             emitter.dedent();
             emitter.emit("}");
+        }
+        InlineStmtContextAll::StmtCallContext(ctx) => {
+            // Procedure call as a statement: `CheckVFPEnabled(TRUE);`
+            let name = ctx.qualId().unwrap().get_text().replace('.', "_");
+            let args: Vec<String> = ctx.exprCommaList0().unwrap()
+                .expr_all()
+                .iter()
+                .map(|e| generate_expr(e))
+                .collect();
+            emitter.emit(&format!("{}({});", name, args.join(", ")));
         }
         InlineStmtContextAll::StmtDefEnumContext(ctx) => {
             let name = ctx.id().unwrap().get_text();

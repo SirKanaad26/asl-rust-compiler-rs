@@ -4,12 +4,16 @@ use common::run_compiler;
 #[test]
 fn instruction_runtime_stubs() {
     let out = run_compiler("instructions", "examples/instruction_execute.asl");
-    assert!(out.contains("pub fn UInt(x: u64) -> i128"), "expected UInt stub:\n{out}");
+    // BV-6: stubs now accept impl AslValue so BitVec<N>, u64, and i128 all flow
+    assert!(out.contains("pub fn UInt(x: impl AslValue) -> i128"), "expected UInt stub:\n{out}");
+    assert!(out.contains("use bitvec::AslValue"), "expected AslValue import:\n{out}");
     assert!(out.contains("pub fn HaveFP16Ext() -> bool"), "expected HaveFP16Ext stub:\n{out}");
     assert!(out.contains("non_snake_case") && out.contains("#![allow("), "expected allow attr:\n{out}");
     assert!(out.contains("pub struct CpuState"), "expected CpuState struct:\n{out}");
     assert!(out.contains("pub X: [u64; 32]"), "expected CpuState GP registers:\n{out}");
-    assert!(out.contains("pub fn Xreg(cpu: &CpuState, n: u64) -> u64"), "expected Xreg stub:\n{out}");
+    // Register read accessors now return i128 (ASL integer) to avoid casts at call sites
+    assert!(out.contains("pub fn Xreg(cpu: &CpuState, n: impl AslValue) -> i128"), "expected Xreg stub:\n{out}");
+    assert!(out.contains("pub fn set_Xreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)"), "expected set_Xreg stub:\n{out}");
 }
 
 #[test]
@@ -68,4 +72,17 @@ fn instruction_simple() {
     assert!(out.contains("fixed_mask"), "expected opcode mask check:\n{out}");
     // Decode block body is emitted
     assert!(out.contains("let mut d: i128 = UInt(Rd)"), "expected decode block stmt:\n{out}");
+}
+
+#[test]
+fn bv6_coercions() {
+    let out = run_compiler("instructions", "examples/bv6_coercions.asl");
+    // AslValue trait imported so stubs and generated code can use it
+    assert!(out.contains("use bitvec::AslValue"), "expected AslValue import:\n{out}");
+    // bits(64) decode var wrapped with BitVec::from_asl — NOT a direct cast
+    assert!(out.contains("BitVec::from_asl(Xreg(cpu, n))"), "expected from_asl coercion for Xreg read:\n{out}");
+    // set_Xreg called with BitVec<64> value (impl AslValue accepts it)
+    assert!(out.contains("set_Xreg(cpu, d, result)"), "expected set_Xreg call:\n{out}");
+    // Struct uses integer (i128) fields for UInt-computed vars
+    assert!(out.contains("pub d: i128"), "expected d: i128 in struct:\n{out}");
 }

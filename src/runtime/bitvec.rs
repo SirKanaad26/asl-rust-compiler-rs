@@ -199,6 +199,110 @@ impl<const N: usize> Default for BitVec<N> {
     }
 }
 
+// ── AslValue trait ────────────────────────────────────────────────────────────
+
+/// Universal conversion trait for all types that can flow through ASL expressions.
+/// Implemented by primitive integers, `bool`, and `BitVec<N>`.
+///
+/// This is the key bridge for BV-6: instead of every stub needing separate
+/// overloads for `u64`, `i128`, and `BitVec<N>`, they all accept `impl AslValue`.
+pub trait AslValue: Copy + 'static {
+    fn to_u128(self) -> u128;
+    fn to_u64(self)  -> u64  { self.to_u128() as u64 }
+    fn to_i128(self) -> i128 { self.to_u128() as i128 }
+    fn to_bool(self) -> bool { self.to_u128() != 0 }
+}
+
+macro_rules! impl_asl_value {
+    ($t:ty) => {
+        impl AslValue for $t {
+            #[inline] fn to_u128(self) -> u128 { self as u128 }
+        }
+    };
+}
+
+impl_asl_value!(u8);
+impl_asl_value!(u16);
+impl_asl_value!(u32);
+impl_asl_value!(u64);
+impl_asl_value!(u128);
+impl_asl_value!(i8);
+impl_asl_value!(i16);
+impl_asl_value!(i32);
+impl_asl_value!(i64);
+impl_asl_value!(i128);
+
+impl AslValue for bool {
+    #[inline] fn to_u128(self) -> u128 { self as u128 }
+}
+
+impl<const N: usize> AslValue for BitVec<N> {
+    #[inline] fn to_u128(self) -> u128 { self.data }
+}
+
+impl<const N: usize> BitVec<N> {
+    /// Construct from any `AslValue`, masking to `N` bits.
+    /// This is the preferred way to convert primitives or other BitVec widths
+    /// into a `BitVec<N>` in generated code.
+    pub fn from_asl(v: impl AslValue) -> Self {
+        BitVec { data: v.to_u128() & mask(N) }
+    }
+}
+
+// ── Arithmetic ops (width-exact: results are masked to N bits) ────────────────
+
+use core::ops::{Add, Sub, Mul, BitAnd, BitOr, BitXor, Not, Shl, Shr};
+
+impl<const N: usize> Add for BitVec<N> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self { BitVec::from_u128(self.data.wrapping_add(rhs.data)) }
+}
+impl<const N: usize> Sub for BitVec<N> {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self { BitVec::from_u128(self.data.wrapping_sub(rhs.data)) }
+}
+impl<const N: usize> Mul for BitVec<N> {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self { BitVec::from_u128(self.data.wrapping_mul(rhs.data)) }
+}
+impl<const N: usize> BitAnd for BitVec<N> {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self { BitVec { data: self.data & rhs.data } }
+}
+impl<const N: usize> BitOr for BitVec<N> {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self { BitVec { data: self.data | rhs.data } }
+}
+impl<const N: usize> BitXor for BitVec<N> {
+    type Output = Self;
+    fn bitxor(self, rhs: Self) -> Self { BitVec { data: self.data ^ rhs.data } }
+}
+impl<const N: usize> Not for BitVec<N> {
+    type Output = Self;
+    fn not(self) -> Self { BitVec::from_u128(!self.data) }
+}
+impl<const N: usize> Shl<usize> for BitVec<N> {
+    type Output = Self;
+    fn shl(self, rhs: usize) -> Self { BitVec::from_u128(self.data << rhs) }
+}
+impl<const N: usize> Shr<usize> for BitVec<N> {
+    type Output = Self;
+    fn shr(self, rhs: usize) -> Self { BitVec { data: self.data >> rhs } }
+}
+
+// ── Comparison with primitives ─────────────────────────────────────────────────
+
+impl<const N: usize> PartialOrd for BitVec<N> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl<const N: usize> Ord for BitVec<N> {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.data.cmp(&other.data)
+    }
+}
+
 // ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -274,5 +378,78 @@ mod tests {
     fn test_128_bit() {
         let v: BitVec<128> = BitVec::from_u128(u128::MAX);
         assert_eq!(v.to_u128(), u128::MAX);
+    }
+
+    // ── BV-6: AslValue trait + from_asl + arithmetic ops ─────────────────────
+
+    #[test]
+    fn test_from_asl_from_u64() {
+        let v: BitVec<4> = BitVec::from_asl(0xFF_u64); // masks to 4 bits
+        assert_eq!(v.to_u128(), 0xF);
+    }
+
+    #[test]
+    fn test_from_asl_from_i128() {
+        let v: BitVec<8> = BitVec::from_asl(-1_i128); // all-ones after masking
+        assert_eq!(v.to_u128(), 0xFF);
+    }
+
+    #[test]
+    fn test_from_asl_from_bitvec() {
+        // Widening: BitVec<4> → BitVec<8>
+        let src: BitVec<4> = BitVec::from_u64(0b1010);
+        let dst: BitVec<8> = BitVec::from_asl(src);
+        assert_eq!(dst.to_u128(), 0b1010);
+    }
+
+    #[test]
+    fn test_asl_value_to_methods() {
+        let v: BitVec<16> = BitVec::from_u64(0xABCD);
+        assert_eq!(v.to_u64(), 0xABCD);
+        assert_eq!(v.to_i128(), 0xABCD_i128);
+        assert_eq!(v.to_bool(), true);
+        let z: BitVec<8> = BitVec::zero();
+        assert_eq!(z.to_bool(), false);
+    }
+
+    #[test]
+    fn test_arithmetic_add() {
+        let a: BitVec<8> = BitVec::from_u64(200);
+        let b: BitVec<8> = BitVec::from_u64(100);
+        let c = a + b; // 300 & 0xFF = 44
+        assert_eq!(c.to_u128(), 300 & 0xFF);
+    }
+
+    #[test]
+    fn test_arithmetic_sub() {
+        let a: BitVec<8> = BitVec::from_u64(10);
+        let b: BitVec<8> = BitVec::from_u64(3);
+        assert_eq!((a - b).to_u128(), 7);
+    }
+
+    #[test]
+    fn test_bitwise_ops() {
+        let a: BitVec<8> = BitVec::from_u64(0b1010_1010);
+        let b: BitVec<8> = BitVec::from_u64(0b1100_1100);
+        assert_eq!((a & b).to_u128(), 0b1000_1000);
+        assert_eq!((a | b).to_u128(), 0b1110_1110);
+        assert_eq!((a ^ b).to_u128(), 0b0110_0110);
+        assert_eq!((!a).to_u128(), 0b0101_0101);
+    }
+
+    #[test]
+    fn test_shift_ops() {
+        let v: BitVec<8> = BitVec::from_u64(0b0000_0011);
+        assert_eq!((v << 2).to_u128(), 0b0000_1100);
+        assert_eq!((v >> 1).to_u128(), 0b0000_0001);
+    }
+
+    #[test]
+    fn test_ord() {
+        let a: BitVec<8> = BitVec::from_u64(5);
+        let b: BitVec<8> = BitVec::from_u64(10);
+        assert!(a < b);
+        assert!(b > a);
+        assert_eq!(a, a);
     }
 }

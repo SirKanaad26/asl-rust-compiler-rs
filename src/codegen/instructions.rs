@@ -30,22 +30,25 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.emit("#![allow(incomplete_features, non_snake_case, dead_code, unused_variables, unused_mut, unused_imports)]");
     emitter.emit("mod bitvec;");
     emitter.emit("use bitvec::BitVec;");
+    emitter.emit("use bitvec::AslValue;");
     emitter.emit("");
     emitter.emit("// ── ASL built-in runtime stubs ──────────────────────────────────────────────");
     for (sig, body) in &[
-        ("fn UInt(x: u64) -> i128",              "x as i128"),
-        ("fn SInt(x: u64) -> i128",              "x as i128 /* TODO: sign-extend by field width */"),
-        ("fn IsZero(x: u64) -> bool",             "x == 0"),
-        ("fn IsOnes(x: u64) -> bool",             "x == u64::MAX"),
-        ("fn Zeros(_n: u64) -> u64",              "0"),
-        ("fn Ones(n: u64) -> u64",                "if n >= 64 { u64::MAX } else { (1u64 << n) - 1 }"),
-        ("fn ZeroExtend(x: u64, _n: u64) -> u64", "x"),
-        ("fn HaveFP16Ext() -> bool",              "false"),
-        ("fn HaveBF16Ext() -> bool",              "false"),
-        ("fn HaveSVE() -> bool",                  "false"),
-        ("fn HaveSVE2() -> bool",                 "false"),
-        ("fn HaveMTE() -> bool",                  "false"),
-        ("fn asl_mod(a: i128, b: i128) -> i128",  "((a % b) + b) % b"),
+        // Numeric conversion stubs — accept any AslValue so u64, i128, and
+        // BitVec<N> all flow through without explicit casts in generated code.
+        ("fn UInt(x: impl AslValue) -> i128",              "x.to_u128() as i128"),
+        ("fn SInt(x: impl AslValue) -> i128",              "x.to_u128() as i128 /* TODO: sign-extend by field width */"),
+        ("fn IsZero(x: impl AslValue) -> bool",            "x.to_u128() == 0"),
+        ("fn IsOnes(x: impl AslValue) -> bool",            "x.to_u64() == u64::MAX"),
+        ("fn Zeros(_n: impl AslValue) -> i128",            "0"),
+        ("fn Ones(n: impl AslValue) -> i128",              "{ let n = n.to_u64(); if n >= 64 { u64::MAX as i128 } else { ((1u64 << n) - 1) as i128 } }"),
+        ("fn ZeroExtend(x: impl AslValue, _n: impl AslValue) -> i128", "x.to_u128() as i128"),
+        ("fn HaveFP16Ext() -> bool",                       "false"),
+        ("fn HaveBF16Ext() -> bool",                       "false"),
+        ("fn HaveSVE() -> bool",                           "false"),
+        ("fn HaveSVE2() -> bool",                          "false"),
+        ("fn HaveMTE() -> bool",                           "false"),
+        ("fn asl_mod(a: i128, b: i128) -> i128",           "((a % b) + b) % b"),
     ] {
         emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
@@ -92,16 +95,20 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.dedent();
     emitter.emit("}");
     for (sig, body) in &[
-        ("fn Xreg(cpu: &CpuState, n: u64) -> u64",           "cpu.X[n as usize]"),
-        ("fn Wreg(cpu: &CpuState, n: u64) -> u64",           "cpu.X[n as usize] & 0xFFFF_FFFF"),
-        ("fn set_Xreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.X[n as usize] = val"),
-        ("fn set_Wreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.X[n as usize] = val & 0xFFFF_FFFF"),
-        ("fn Rreg(cpu: &CpuState, n: u64) -> u64",           "cpu.R[n as usize]"),
-        ("fn set_Rreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.R[n as usize] = val & 0xFFFF_FFFF"),
-        ("fn Sreg(cpu: &CpuState, n: u64) -> u64",           "cpu.S[n as usize]"),
-        ("fn set_Sreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.S[n as usize] = val"),
-        ("fn Dreg(cpu: &CpuState, n: u64) -> u64",           "cpu.VD[n as usize]"),
-        ("fn set_Dreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.VD[n as usize] = val"),
+        // Register accessors: index and value both accept any AslValue so
+        // integer (i128) decode vars and BitVec<N> fields flow without casts.
+        // Read accessors return i128 (ASL integer) rather than u64 so the
+        // result can be stored directly in integer or bits(N) decoded vars.
+        ("fn Xreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.X[n.to_u64() as usize] as i128"),
+        ("fn Wreg(cpu: &CpuState, n: impl AslValue) -> i128",              "(cpu.X[n.to_u64() as usize] & 0xFFFF_FFFF) as i128"),
+        ("fn set_Xreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.X[n.to_u64() as usize] = val.to_u64()"),
+        ("fn set_Wreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.X[n.to_u64() as usize] = val.to_u64() & 0xFFFF_FFFF"),
+        ("fn Rreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.R[n.to_u64() as usize] as i128"),
+        ("fn set_Rreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.R[n.to_u64() as usize] = val.to_u64() & 0xFFFF_FFFF"),
+        ("fn Sreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.S[n.to_u64() as usize] as i128"),
+        ("fn set_Sreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.S[n.to_u64() as usize] = val.to_u64()"),
+        ("fn Dreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.VD[n.to_u64() as usize] as i128"),
+        ("fn set_Dreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.VD[n.to_u64() as usize] = val.to_u64()"),
         ("fn check_condition(cpu: &CpuState) -> bool",
          "true /* TODO: evaluate CPSR/PSTATE condition codes against N/Z/C/V */"),
     ] {
