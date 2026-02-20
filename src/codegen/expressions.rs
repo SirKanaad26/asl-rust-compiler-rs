@@ -76,6 +76,15 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
                 .iter()
                 .map(|s| generate_slice(s))
                 .collect();
+            // Map register array reads to CpuState accessor calls.
+            // In ASL, X[n]/W[n] are always register accesses, not plain arrays.
+            if slices.len() == 1 {
+                match obj.as_str() {
+                    "X" => return format!("Xreg(cpu, {})", slices[0]),
+                    "W" => return format!("Wreg(cpu, {})", slices[0]),
+                    _ => {}
+                }
+            }
             format!("{}[{}]", obj, slices.join(", "))
         }
         ExprContextAll::ExprSliceContext(ctx) => {
