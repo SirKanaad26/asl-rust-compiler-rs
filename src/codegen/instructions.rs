@@ -233,6 +233,20 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
             emitter.emit(&format!("if !({}) {{ return None; }}", guard_str));
         }
 
+        // __unpredictable_unless checks: runtime asserts that certain bits hold expected values.
+        // UNPREDICTABLE behaviour is architecturally undefined, so we panic if violated.
+        for unpred in enc.instrUnpredictableUnless_all() {
+            if let (Some(idx_tok), Some(bin_tok)) = (&unpred.idx, &unpred.bin) {
+                let idx: u64 = idx_tok.get_text().parse().unwrap_or(0);
+                // BIN_LIT is like '0' or '1' — strip the surrounding quotes
+                let bit_val: u64 = bin_tok.get_text().trim_matches('\'').parse().unwrap_or(0);
+                emitter.emit(&format!(
+                    "assert!((bits >> {}) & 1 == {}, \"UNPREDICTABLE\");",
+                    idx, bit_val
+                ));
+            }
+        }
+
         // Decode block statements (declare and compute the decode vars).
         // UNDEFINED here means the instruction doesn't exist → return None.
         if let Some(block) = &enc.decode {

@@ -34,6 +34,13 @@ fn instruction_guard() {
 }
 
 #[test]
+fn instruction_unpredictable_unless() {
+    let out = run_compiler("instructions", "examples/instruction_unpredictable_unless.asl");
+    assert!(out.contains("assert!((bits >> 6) & 1 == 0, \"UNPREDICTABLE\");"), "expected bit-6 check:\n{out}");
+    assert!(out.contains("assert!((bits >> 11) & 1 == 1, \"UNPREDICTABLE\");"), "expected bit-11 check:\n{out}");
+}
+
+#[test]
 fn instruction_implicit_decl() {
     let out = run_compiler("instructions", "examples/instruction_implicit_decl.asl");
     // `result` is assigned but never declared — must be hoisted
