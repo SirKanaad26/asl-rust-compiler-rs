@@ -3,11 +3,13 @@ use antlr_rust::tree::ParseTree;
 use antlr_rust::token::Token;
 
 use crate::codegen::emitter::CodeEmitter;
+use crate::codegen::statements::generate_stmt;
 use crate::parser::aslparser::{
     InstructionContextAll,
     InstructionContextAttrs,
     EncodingContextAttrs,
     InstructionFieldContextAttrs,
+    IndentedBlockContextAttrs,
 };
 
 pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionContextAll<'_>>) {
@@ -63,18 +65,23 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.dedent();
         emitter.emit("}");
 
-        // Field extraction
+        // Field extraction (mut so decode block can reassign them)
         for (name, begin, len) in &fields {
             let mask = (1u64 << len) - 1;
             emitter.emit(&format!(
-                "let {}: u64 = (bits >> {}) & 0x{:X};",
+                "let mut {}: u64 = (bits >> {}) & 0x{:X};",
                 name, begin, mask
             ));
         }
 
-        // Placeholder for decode block statements
-        if enc.decode.is_some() {
-            emitter.emit("// TODO: decode block");
+        // Decode block statements
+        if let Some(block) = &enc.decode {
+            for stmt in block.stmt_all() {
+                let deferred = generate_stmt(emitter, &stmt);
+                for d in deferred {
+                    generate_stmt(emitter, &d);
+                }
+            }
         }
 
         // Return constructed value
