@@ -53,7 +53,7 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.emit("pub X: [u64; 32],");   // AArch64 64-bit GPRs
     emitter.emit("pub R: [u64; 16],");   // AArch32 32-bit GPRs
     emitter.emit("pub S: [u64; 32],");   // VFP single-precision
-    emitter.emit("pub D: [u64; 32],");   // VFP double-precision
+    emitter.emit("pub VD: [u64; 32],");  // VFP double-precision (D renamed to avoid clash with PSTATE.D)
     emitter.emit("pub SP: u64,");
     emitter.emit("pub PC: u64,");
     // PSTATE flags
@@ -77,7 +77,7 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.indent();
     emitter.emit("pub fn new() -> Self {");
     emitter.indent();
-    emitter.emit("CpuState { X: [0u64; 32], R: [0u64; 16], S: [0u64; 32], D: [0u64; 32], SP: 0, PC: 0,");
+    emitter.emit("CpuState { X: [0u64; 32], R: [0u64; 16], S: [0u64; 32], VD: [0u64; 32], SP: 0, PC: 0,");
     emitter.emit("    N: false, Z: false, C: false, V: false,");
     emitter.emit("    EL: 0, M: 0, T: false, nRW: false,");
     emitter.emit("    SS: false, IL: false, D: false, A: false, I: false, F: false }");
@@ -94,8 +94,8 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn set_Rreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.R[n as usize] = val & 0xFFFF_FFFF"),
         ("fn Sreg(cpu: &CpuState, n: u64) -> u64",           "cpu.S[n as usize]"),
         ("fn set_Sreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.S[n as usize] = val"),
-        ("fn Dreg(cpu: &CpuState, n: u64) -> u64",           "cpu.D[n as usize]"),
-        ("fn set_Dreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.D[n as usize] = val"),
+        ("fn Dreg(cpu: &CpuState, n: u64) -> u64",           "cpu.VD[n as usize]"),
+        ("fn set_Dreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.VD[n as usize] = val"),
     ] {
         emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
@@ -152,6 +152,8 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
     let mut first_enc_name_safe: Option<String> = None;
     let mut first_raw_fields: Vec<(String, u64, u64)> = Vec::new();
     let mut first_decode_vars: Vec<(String, String)> = Vec::new();
+    // (enc_name_safe, fixed_bits) — used for the test harness
+    let mut test_cases: Vec<(String, u64)> = Vec::new();
 
     for enc in instr.encoding_all() {
         let enc_name = enc.idWithDots().unwrap().get_text();
@@ -204,6 +206,7 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         // Opcode mask check
         let opcode_text = enc.opcode.as_ref().map(|t| t.get_text()).unwrap_or("''");
         let (fixed_mask, fixed_bits) = parse_opcode(&opcode_text);
+        test_cases.push((enc_name_safe.clone(), fixed_bits));
         emitter.emit(&format!("let fixed_mask: u64 = 0x{:X};", fixed_mask));
         emitter.emit(&format!("let fixed_bits: u64 = 0x{:X};", fixed_bits));
         emitter.emit("if bits & fixed_mask != fixed_bits {");
@@ -304,6 +307,34 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
     }
     emitter.dedent();
     emitter.emit("}");
+
+    // Emit one #[test] per encoding that exercises decode → execute end-to-end.
+    // Uses fixed_bits (all don't-care bits = 0) as the test opcode.
+    // Wrapped in `if let Some` because the guard expression may reject all-zero don't-care fields.
+    if !test_cases.is_empty() {
+        emitter.emit("");
+        emitter.emit("#[cfg(test)]");
+        emitter.emit(&format!("mod tests_{} {{", instr_name_safe));
+        emitter.indent();
+        emitter.emit("use super::*;");
+        for (enc_name, fixed_bits) in &test_cases {
+            emitter.emit("");
+            emitter.emit("#[test]");
+            emitter.emit(&format!("fn decode_execute_{}() {{", enc_name));
+            emitter.indent();
+            emitter.emit(&format!("let bits: u64 = 0x{:016X};", fixed_bits));
+            emitter.emit(&format!("if let Some(enc) = {}::decode(bits) {{", enc_name));
+            emitter.indent();
+            emitter.emit("let mut cpu = CpuState::new();");
+            emitter.emit(&format!("execute_{}(&enc, &mut cpu);", instr_name_safe));
+            emitter.dedent();
+            emitter.emit("}");
+            emitter.dedent();
+            emitter.emit("}");
+        }
+        emitter.dedent();
+        emitter.emit("}");
+    }
 }
 
 /// Parse an ASL opcode pattern (e.g. `'11xx 00xx'`) into (fixed_mask, fixed_bits).
