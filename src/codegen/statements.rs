@@ -239,6 +239,31 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             // Special-case register array writes: X[n] = v → set_Xreg(cpu, n, v)
             if let Some((setter, idx)) = reg_write_setter(&lval) {
                 emitter.emit(&format!("{}(cpu, {}, {});", setter, idx, rhs));
+            } else if let LValExprContextAll::LValSliceOfContext(slice_ctx) = lval.as_ref() {
+                // Bit-slice write: x<hi:lo> = val → obj.set_slice(lo, hi, val as u128)
+                //                  x<i>     = val → obj.set_slice(i, i, val as u128)
+                let obj = generate_lval(&slice_ctx.lValExpr().unwrap());
+                let slices = slice_ctx.sliceCommaList1().unwrap().slice_all();
+                if slices.len() == 1 {
+                    let stmt = match slices[0].as_ref() {
+                        SliceContextAll::SliceSingleContext(sctx) => {
+                            let bit = generate_expr(&sctx.expr().unwrap());
+                            format!("{}.set_slice({} as usize, {} as usize, ({}) as u128);",
+                                obj, bit, bit, rhs)
+                        }
+                        SliceContextAll::SliceRangeContext(rctx) => {
+                            let hi = rctx.begin.as_ref().unwrap().get_text();
+                            let lo = rctx.end.as_ref().unwrap().get_text();
+                            format!("{}.set_slice({} as usize, {} as usize, ({}) as u128);",
+                                obj, lo, hi, rhs)
+                        }
+                        _ => format!("// TODO: bit slice write: {}<{}>",
+                            obj, slices[0].get_text()),
+                    };
+                    emitter.emit(&stmt);
+                } else {
+                    emitter.emit(&format!("// TODO: multi-slice write: {}", lval.get_text()));
+                }
             } else {
                 let lhs = generate_lval(&lval);
                 emitter.emit(&format!("{} = {};", lhs, rhs));

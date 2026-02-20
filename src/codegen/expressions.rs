@@ -321,18 +321,23 @@ fn generate_slice(slice: &Rc<SliceContextAll<'_>>) -> String {
     }
 }
 
-/// Generate a Rust lvalue bit-slice assignment target.
-/// For `x<hi:lo> = val`, Rust needs a helper; we emit `set_bits(&mut x, lo, hi, val)`.
+/// Generate a Rust lvalue bit-slice assignment target string.
+/// NOTE: This is only reached when `generate_lval` is called directly on a
+/// `LValSliceOfContext` node (e.g. nested lvalues). The primary assignment path
+/// in `generate_inline_stmt` intercepts `LValSliceOfContext` and emits the full
+/// `obj.set_slice(lo, hi, val as u128)` statement directly.
 fn generate_lval_bit_slice(obj: &str, slice: &Rc<SliceContextAll<'_>>) -> String {
     match slice.as_ref() {
         SliceContextAll::SliceSingleContext(ctx) => {
             let bit = generate_expr(&ctx.expr().unwrap());
-            format!("set_bit({}, {})", obj, bit)
+            // Placeholder: real write uses obj.set_slice(bit, bit, val as u128)
+            format!("todo!(/* set bit {}<{}> */)", obj, bit)
         }
         SliceContextAll::SliceRangeContext(ctx) => {
             let hi = ctx.begin.as_ref().unwrap().get_text();
             let lo = ctx.end.as_ref().unwrap().get_text();
-            format!("set_bits({}, {}, {})", obj, lo, hi)
+            // Placeholder: real write uses obj.set_slice(lo, hi, val as u128)
+            format!("todo!(/* set slice {}<{}:{}> */)", obj, hi, lo)
         }
         _ => {
             format!("todo!(/* lval bit slice: {}<{}> */)", obj, slice.get_text())
