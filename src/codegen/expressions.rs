@@ -91,7 +91,11 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
         ExprContextAll::ExprMemberContext(ctx) => {
             let obj = generate_expr(&ctx.expr().unwrap());
             let field = ctx.id().unwrap().get_text();
-            format!("{}.{}", obj, field)
+            if obj == "PSTATE" {
+                format!("cpu.{}", field)
+            } else {
+                format!("{}.{}", obj, field)
+            }
         }
         ExprContextAll::ExprTupleContext(ctx) => {
             let elems: Vec<String> = ctx.exprCommaList1().unwrap()
@@ -176,7 +180,11 @@ pub fn generate_lval(lval: &Rc<LValExprContextAll<'_>>) -> String {
         LValExprContextAll::LValMemberContext(ctx) => {
             let obj = generate_lval(&ctx.lValExpr().unwrap());
             let field = ctx.id().unwrap().get_text();
-            format!("{}.{}", obj, field)
+            if obj == "PSTATE" {
+                format!("cpu.{}", field)
+            } else {
+                format!("{}.{}", obj, field)
+            }
         }
         LValExprContextAll::LValArrayIndexContext(ctx) => {
             let obj = generate_lval(&ctx.lValExpr().unwrap());
