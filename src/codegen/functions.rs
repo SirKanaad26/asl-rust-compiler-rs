@@ -25,7 +25,7 @@ fn map_return_type(ret: Option<std::rc::Rc<ReturnTypeContextAll<'_>>>) -> String
 }
 
 pub fn generate_callable(emitter: &mut CodeEmitter, ctx: &DefCallableContext<'_>) {
-    let name = ctx.qualId().unwrap().get_text();
+    let name = ctx.qualId().unwrap().get_text().replace('.', "_");
     let rust_ret = map_return_type(ctx.returnType());
 
     // Parameters

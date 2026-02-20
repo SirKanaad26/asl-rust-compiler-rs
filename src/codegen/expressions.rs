@@ -8,7 +8,7 @@ use crate::parser::aslparser::*;
 pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
     match expr.as_ref() {
         ExprContextAll::ExprVarRefContext(ctx) => {
-            let name = ctx.qualId().unwrap().get_text();
+            let name = ctx.qualId().unwrap().get_text().replace('.', "_");
             match name.as_str() {
                 "TRUE" => "true".to_string(),
                 "FALSE" => "false".to_string(),
@@ -60,7 +60,7 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
             format!("({})", inner)
         }
         ExprContextAll::ExprCallContext(ctx) => {
-            let name = ctx.qualId().unwrap().get_text();
+            let name = ctx.qualId().unwrap().get_text().replace('.', "_");
             let args: Vec<String> = ctx.exprCommaList0().unwrap()
                 .expr_all()
                 .iter()
@@ -170,7 +170,7 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
 pub fn generate_lval(lval: &Rc<LValExprContextAll<'_>>) -> String {
     match lval.as_ref() {
         LValExprContextAll::LValVarRefContext(ctx) => {
-            ctx.qualId().unwrap().get_text()
+            ctx.qualId().unwrap().get_text().replace('.', "_")
         }
         LValExprContextAll::LValMemberContext(ctx) => {
             let obj = generate_lval(&ctx.lValExpr().unwrap());
