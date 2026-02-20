@@ -105,15 +105,48 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.emit("}");
     }
 
-    // Execute stub
+    // Postdecode function (shared logic run after any encoding's decode)
+    if let Some(block) = &instr.postDecodeBlock {
+        emitter.emit("");
+        emitter.emit(&format!("// Postdecode: {}", instr_name));
+        emitter.emit(&format!("pub fn postdecode_{}() {{", instr_name_safe));
+        emitter.indent();
+        for stmt in block.stmt_all() {
+            let deferred = generate_stmt(emitter, &stmt);
+            for d in deferred {
+                generate_stmt(emitter, &d);
+            }
+        }
+        emitter.dedent();
+        emitter.emit("}");
+    }
+
+    // Execute function
     emitter.emit("");
     emitter.emit(&format!("// Execute: {}", instr_name));
+    if instr.conditional.is_some() {
+        emitter.emit("// __conditional: instruction is conditionally executed");
+    }
     emitter.emit(&format!(
         "pub fn execute_{}(/* TODO: cpu state */) {{",
         instr_name_safe
     ));
     emitter.indent();
-    emitter.emit(&format!("todo!(\"execute {}\");", instr_name));
+    if let Some(block) = &instr.executeBlock {
+        let stmts = block.stmt_all();
+        if stmts.is_empty() {
+            emitter.emit("// empty execute block");
+        } else {
+            for stmt in &stmts {
+                let deferred = generate_stmt(emitter, &stmt);
+                for d in deferred {
+                    generate_stmt(emitter, &d);
+                }
+            }
+        }
+    } else {
+        emitter.emit(&format!("todo!(\"execute {}\");", instr_name));
+    }
     emitter.dedent();
     emitter.emit("}");
 }
