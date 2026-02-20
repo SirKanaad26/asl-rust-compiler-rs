@@ -2,6 +2,12 @@ mod common;
 use common::run_compiler;
 
 #[test]
+fn instruction_guard() {
+    let out = run_compiler("instructions", "examples/instruction_guard.asl");
+    assert!(out.contains("if !(cond != 0b1111) { return None; }"), "expected guard check:\n{out}");
+}
+
+#[test]
 fn instruction_simple() {
     let out = run_compiler("instructions", "examples/instruction_simple.asl");
     assert!(out.contains("pub struct TestEncoding"), "expected encoding struct:\n{out}");

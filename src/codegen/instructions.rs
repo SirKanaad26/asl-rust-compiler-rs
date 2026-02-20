@@ -3,6 +3,7 @@ use antlr_rust::tree::ParseTree;
 use antlr_rust::token::Token;
 
 use crate::codegen::emitter::CodeEmitter;
+use crate::codegen::expressions::generate_expr;
 use crate::codegen::statements::generate_stmt;
 use crate::parser::aslparser::{
     InstructionContextAll,
@@ -72,6 +73,12 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
                 "let mut {}: u64 = (bits >> {}) & 0x{:X};",
                 name, begin, mask
             ));
+        }
+
+        // Guard check — evaluated after field extraction since guard may reference fields
+        if let Some(guard) = enc.expr() {
+            let guard_str = generate_expr(&guard);
+            emitter.emit(&format!("if !({}) {{ return None; }}", guard_str));
         }
 
         // Decode block statements
