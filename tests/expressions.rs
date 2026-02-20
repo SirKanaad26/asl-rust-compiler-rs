@@ -16,8 +16,8 @@ fn expr_array_index() {
 #[test]
 fn expr_bit_slice() {
     let out = run_compiler("definitions", "examples/expr_slice.asl");
-    assert!(out.contains("((x >> 0) & ((1 << (7 - 0 + 1)) - 1))"), "missing range bit slice:\n{out}");
-    assert!(out.contains("((x >> n) & 1)"), "missing single bit slice:\n{out}");
+    assert!(out.contains("x.slice::<7, 0>()"), "missing range bit slice:\n{out}");
+    assert!(out.contains("x.bit(n as usize)"), "missing single bit slice:\n{out}");
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn expr_if() {
 #[test]
 fn expr_concat() {
     let out = run_compiler("definitions", "examples/expr_concat.asl");
-    assert!(out.contains("concat_bits(hi, lo)"), "missing concat expression:\n{out}");
+    assert!(out.contains("hi.concat(lo)"), "missing concat expression:\n{out}");
 }
 
 #[test]

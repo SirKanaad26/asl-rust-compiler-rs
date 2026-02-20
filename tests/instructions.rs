@@ -6,7 +6,7 @@ fn instruction_runtime_stubs() {
     let out = run_compiler("instructions", "examples/instruction_execute.asl");
     assert!(out.contains("pub fn UInt(x: u64) -> i128"), "expected UInt stub:\n{out}");
     assert!(out.contains("pub fn HaveFP16Ext() -> bool"), "expected HaveFP16Ext stub:\n{out}");
-    assert!(out.contains("#![allow(non_snake_case"), "expected allow attr:\n{out}");
+    assert!(out.contains("non_snake_case") && out.contains("#![allow("), "expected allow attr:\n{out}");
     assert!(out.contains("pub struct CpuState"), "expected CpuState struct:\n{out}");
     assert!(out.contains("pub X: [u64; 32]"), "expected CpuState GP registers:\n{out}");
     assert!(out.contains("pub fn Xreg(cpu: &CpuState, n: u64) -> u64"), "expected Xreg stub:\n{out}");

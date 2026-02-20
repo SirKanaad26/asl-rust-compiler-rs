@@ -48,7 +48,7 @@ fn variable() {
     let out = run_compiler("definitions", "examples/variable.asl");
     assert!(out.contains("pub static myVar: std::sync::Mutex<i128>"), "missing myVar:\n{out}");
     assert!(out.contains("pub static flag: std::sync::Mutex<bool>"), "missing flag:\n{out}");
-    assert!(out.contains("pub static data: std::sync::Mutex<u32>"), "missing data:\n{out}");
+    assert!(out.contains("pub static data: std::sync::Mutex<BitVec<32>>"), "missing data:\n{out}");
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn constant() {
 fn array_def() {
     let out = run_compiler("definitions", "examples/array_def.asl");
     assert!(out.contains("Mutex<[i128; 11]>"), "missing arr[0..10]:\n{out}");
-    assert!(out.contains("Mutex<[u32; 4]>"), "missing regs[0..3]:\n{out}");
+    assert!(out.contains("Mutex<[BitVec<32>; 4]>"), "missing regs[0..3]:\n{out}");
     assert!(out.contains("Mutex<[bool; 8]>"), "missing flags[0..7]:\n{out}");
 }
 

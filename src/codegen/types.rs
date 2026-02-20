@@ -15,25 +15,23 @@ pub fn map_type(type_ctx: &Rc<TypeSpecContextAll<'_>>) -> String {
                 "boolean" => "bool".to_string(),
                 "real" => "f64".to_string(),
                 "string" => "String".to_string(),
-                "bit" => "u8".to_string(),
+                "bit" => "BitVec<1>".to_string(),
                 other => other.to_string(),
             }
         }
         TypeSpecContextAll::TypeIndexedContext(ctx) => {
-            // e.g., bits(32) → u32
+            // e.g., bits(32) → BitVec<32>
             let text = ctx.get_text();
             if text.starts_with("bits(") {
-                let n: u32 = text
+                let inner = text
                     .trim_start_matches("bits(")
-                    .trim_end_matches(')')
-                    .parse()
-                    .unwrap_or(64);
-                match n {
-                    1..=8 => "u8".to_string(),
-                    9..=16 => "u16".to_string(),
-                    17..=32 => "u32".to_string(),
-                    33..=64 => "u64".to_string(),
-                    _ => format!("u{}", n),
+                    .trim_end_matches(')');
+                if let Ok(n) = inner.parse::<u32>() {
+                    format!("BitVec<{}>", n)
+                } else {
+                    // Variable width (e.g. bits(N) where N is a parameter).
+                    // Fall back to BitVec<64> until parametric types are supported.
+                    format!("BitVec<64> /* TODO: variable width bits({}) */", inner)
                 }
             } else {
                 text
@@ -68,6 +66,7 @@ pub fn default_value_for(rust_type: &str) -> String {
         "f64" => "0.0".to_string(),
         "String" => "String::new()".to_string(),
         t if t.starts_with('u') && t[1..].parse::<u32>().is_ok() => "0".to_string(),
+        t if t.starts_with("BitVec<") => "BitVec::zero()".to_string(),
         _ => format!("{}::default()", rust_type),
     }
 }

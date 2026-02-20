@@ -42,7 +42,7 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
             let rhs = generate_expr(ctx.operand2.as_ref().unwrap());
             let op_text = ctx.operator.as_ref().unwrap().get_text();
             match &*op_text {
-                "++" | ":" => format!("concat_bits({}, {})", lhs, rhs),
+                "++" | ":" => format!("{}.concat({})", lhs, rhs),
                 "MOD" => format!("asl_mod({}, {})", lhs, rhs),
                 _ => {
                     let op = map_binop(&op_text);
@@ -274,22 +274,34 @@ fn map_binop(op: &str) -> &str {
     }
 }
 
-/// Generate a Rust bit-extraction expression from an ASL bit slice
+/// Generate a Rust bit-extraction expression from an ASL bit slice.
+///
+/// Single bit `x<i>`    → `x.bit(i as usize)`  (returns bool)
+/// Range `x<HI:LO>`     → `x.slice::<HI, LO>()` when HI/LO are integer literals
+///                      → `x.slice_rt(hi, lo)`   when HI/LO are runtime expressions
+/// Offset `x<base+:len>`→ `x.slice_rt(base, base + len - 1)` (always runtime)
 fn generate_bit_slice(obj: &str, slice: &Rc<SliceContextAll<'_>>) -> String {
     match slice.as_ref() {
         SliceContextAll::SliceSingleContext(ctx) => {
             let bit = generate_expr(&ctx.expr().unwrap());
-            format!("(({} >> {}) & 1)", obj, bit)
+            format!("{}.bit({} as usize)", obj, bit)
         }
         SliceContextAll::SliceRangeContext(ctx) => {
-            let hi = ctx.begin.as_ref().unwrap().get_text();
-            let lo = ctx.end.as_ref().unwrap().get_text();
-            format!("(({} >> {}) & ((1 << ({} - {} + 1)) - 1))", obj, lo, hi, lo)
+            let hi_text = ctx.begin.as_ref().unwrap().get_text();
+            let lo_text = ctx.end.as_ref().unwrap().get_text();
+            // Use const-generic slice when both bounds are integer literals —
+            // this preserves the width in the return type (BitVec<{HI-LO+1}>).
+            if let (Ok(hi), Ok(lo)) = (hi_text.parse::<usize>(), lo_text.parse::<usize>()) {
+                format!("{}.slice::<{}, {}>()", obj, hi, lo)
+            } else {
+                format!("{}.slice_rt({}, {})", obj, hi_text, lo_text)
+            }
         }
         SliceContextAll::SliceOffsetContext(ctx) => {
+            // x<base+:len>  →  bits [base, base+len-1]
             let base = ctx.sliceBase.as_ref().unwrap().get_text();
             let count = ctx.count.as_ref().unwrap().get_text();
-            format!("(({} >> {}) & ((1 << {}) - 1))", obj, base, count)
+            format!("{}.slice_rt({}, {} + {} - 1)", obj, base, base, count)
         }
         _ => {
             format!("todo!(/* bit slice: {}<{}> */)", obj, slice.get_text())
