@@ -7,6 +7,9 @@ fn instruction_runtime_stubs() {
     assert!(out.contains("pub fn UInt(x: u64) -> i64"), "expected UInt stub:\n{out}");
     assert!(out.contains("pub fn HaveFP16Ext() -> bool"), "expected HaveFP16Ext stub:\n{out}");
     assert!(out.contains("#![allow(non_snake_case"), "expected allow attr:\n{out}");
+    assert!(out.contains("pub struct CpuState"), "expected CpuState struct:\n{out}");
+    assert!(out.contains("pub X: [u64; 32]"), "expected CpuState GP registers:\n{out}");
+    assert!(out.contains("pub fn Xreg(cpu: &CpuState, n: u64) -> u64"), "expected Xreg stub:\n{out}");
 }
 
 #[test]
@@ -19,8 +22,8 @@ fn instruction_execute() {
     assert!(out.contains("pub fn postdecode_AddInstruction(enc: &AddEncoding)"), "expected postdecode sig:\n{out}");
     assert!(out.contains("let d = enc.d"), "expected field shadow:\n{out}");
     assert!(out.contains("assert!(d != 31)"), "expected postdecode body:\n{out}");
-    // Execute takes enc param; body uses bare names
-    assert!(out.contains("pub fn execute_AddInstruction(enc: &AddEncoding)"), "expected execute sig:\n{out}");
+    // Execute takes enc + cpu params; body uses bare names
+    assert!(out.contains("pub fn execute_AddInstruction(enc: &AddEncoding, cpu: &mut CpuState)"), "expected execute sig:\n{out}");
     assert!(out.contains("let mut result: i64 = d + n"), "expected execute body:\n{out}");
 }
 
@@ -35,7 +38,7 @@ fn instruction_simple() {
     let out = run_compiler("instructions", "examples/instruction_simple.asl");
     assert!(out.contains("pub struct TestEncoding"), "expected encoding struct:\n{out}");
     assert!(out.contains("pub fn decode(bits: u64) -> Option<Self>"), "expected decode fn:\n{out}");
-    assert!(out.contains("pub fn execute_TestInstruction(enc: &TestEncoding)"), "expected execute fn:\n{out}");
+    assert!(out.contains("pub fn execute_TestInstruction(enc: &TestEncoding, cpu: &mut CpuState)"), "expected execute fn:\n{out}");
     assert!(out.contains("fixed_mask"), "expected opcode mask check:\n{out}");
     // Decode block body is emitted
     assert!(out.contains("let mut d: i64 = UInt(Rd)"), "expected decode block stmt:\n{out}");

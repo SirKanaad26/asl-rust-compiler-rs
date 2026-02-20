@@ -44,6 +44,39 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
     }
     emitter.emit("");
+
+    // CPU state struct
+    emitter.emit("// ── CPU state ───────────────────────────────────────────────────────────────");
+    emitter.emit("pub struct CpuState {");
+    emitter.indent();
+    emitter.emit("pub X: [u64; 32],");
+    emitter.emit("pub SP: u64,");
+    emitter.emit("pub PC: u64,");
+    emitter.emit("pub N: bool,");
+    emitter.emit("pub Z: bool,");
+    emitter.emit("pub C: bool,");
+    emitter.emit("pub V: bool,");
+    emitter.dedent();
+    emitter.emit("}");
+    emitter.emit("impl CpuState {");
+    emitter.indent();
+    emitter.emit("pub fn new() -> Self {");
+    emitter.indent();
+    emitter.emit("CpuState { X: [0u64; 32], SP: 0, PC: 0, N: false, Z: false, C: false, V: false }");
+    emitter.dedent();
+    emitter.emit("}");
+    emitter.dedent();
+    emitter.emit("}");
+    for (sig, body) in &[
+        ("fn Xreg(cpu: &CpuState, n: u64) -> u64",          "cpu.X[n as usize]"),
+        ("fn Wreg(cpu: &CpuState, n: u64) -> u64",          "cpu.X[n as usize] & 0xFFFF_FFFF"),
+        ("fn set_Xreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.X[n as usize] = val"),
+        ("fn set_Wreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.X[n as usize] = val & 0xFFFF_FFFF"),
+    ] {
+        emitter.emit("#[allow(non_snake_case, dead_code)]");
+        emitter.emit(&format!("pub {} {{ {} }}", sig, body));
+    }
+    emitter.emit("");
 }
 
 /// Scan a decode block for top-level variable declarations, returning (name, rust_type) pairs.
@@ -224,7 +257,7 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.emit("// __conditional: instruction is conditionally executed");
     }
     emitter.emit(&format!(
-        "pub fn execute_{}(enc: &{}) {{",
+        "pub fn execute_{}(enc: &{}, cpu: &mut CpuState) {{",
         instr_name_safe, enc_type
     ));
     emitter.indent();
