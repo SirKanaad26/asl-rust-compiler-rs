@@ -158,8 +158,28 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
         }
         ExprContextAll::ExprInMaskContext(ctx) => {
             let val = generate_expr(&ctx.expr().unwrap());
-            let mask = ctx.MASK_LIT().unwrap().get_text();
-            format!("in_mask({}, {})", val, mask)
+            let raw = ctx.MASK_LIT().unwrap().get_text();
+            // Parse mask literal: '0'/'1' bits contribute to mask and expected;
+            // 'x' bits are don't-cares (excluded from mask).
+            // e.g. '0xx1' → mask=0b1001, expected=0b0001
+            // Emit: (AslValue::to_u128(val) & MASK) == EXPECTED
+            let bits: String = raw.trim_matches('\'')
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect();
+            let n = bits.len();
+            let mut mask_val: u128 = 0;
+            let mut expected: u128 = 0;
+            for (i, ch) in bits.chars().enumerate() {
+                let bit_pos = (n - 1 - i) as u32;
+                match ch {
+                    '0' => { mask_val |= 1u128 << bit_pos; }
+                    '1' => { mask_val |= 1u128 << bit_pos; expected |= 1u128 << bit_pos; }
+                    _ => {} // 'x': don't care
+                }
+            }
+            format!("(AslValue::to_u128({}) & 0x{:X}u128) == 0x{:X}u128",
+                val, mask_val, expected)
         }
         ExprContextAll::ExprIfContext(ctx) => {
             let cond = generate_expr(ctx.test.as_ref().unwrap());

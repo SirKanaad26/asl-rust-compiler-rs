@@ -211,33 +211,40 @@ pub trait AslValue: Copy + 'static {
     fn to_u64(self)  -> u64  { self.to_u128() as u64 }
     fn to_i128(self) -> i128 { self.to_u128() as i128 }
     fn to_bool(self) -> bool { self.to_u128() != 0 }
+    /// The bit-width of this value's type.
+    /// Primitives return their type width; `BitVec<N>` returns `N`.
+    /// Used by `SInt` for correct sign-extension.
+    fn asl_bit_width(self) -> usize;
 }
 
 macro_rules! impl_asl_value {
-    ($t:ty) => {
+    ($t:ty, $w:expr) => {
         impl AslValue for $t {
             #[inline] fn to_u128(self) -> u128 { self as u128 }
+            #[inline] fn asl_bit_width(self) -> usize { $w }
         }
     };
 }
 
-impl_asl_value!(u8);
-impl_asl_value!(u16);
-impl_asl_value!(u32);
-impl_asl_value!(u64);
-impl_asl_value!(u128);
-impl_asl_value!(i8);
-impl_asl_value!(i16);
-impl_asl_value!(i32);
-impl_asl_value!(i64);
-impl_asl_value!(i128);
+impl_asl_value!(u8,   8);
+impl_asl_value!(u16, 16);
+impl_asl_value!(u32, 32);
+impl_asl_value!(u64, 64);
+impl_asl_value!(u128, 128);
+impl_asl_value!(i8,   8);
+impl_asl_value!(i16, 16);
+impl_asl_value!(i32, 32);
+impl_asl_value!(i64, 64);
+impl_asl_value!(i128, 128);
 
 impl AslValue for bool {
     #[inline] fn to_u128(self) -> u128 { self as u128 }
+    #[inline] fn asl_bit_width(self) -> usize { 1 }
 }
 
 impl<const N: usize> AslValue for BitVec<N> {
     #[inline] fn to_u128(self) -> u128 { self.data }
+    #[inline] fn asl_bit_width(self) -> usize { N }
 }
 
 impl<const N: usize> BitVec<N> {
@@ -289,6 +296,53 @@ impl<const N: usize> Shr<usize> for BitVec<N> {
     type Output = Self;
     fn shr(self, rhs: usize) -> Self { BitVec { data: self.data >> rhs } }
 }
+
+// ── Mixed-type arithmetic: BitVec<N> ± primitive and primitive ± BitVec<N> ─────
+//
+// BV-8: Allows `d + 1`, `n - 1`, etc. where one operand is BitVec<N> and the
+// other is a Rust integer literal.  Result is always BitVec<N> (width-preserving).
+
+macro_rules! impl_bitvec_mixed_arith {
+    ($t:ty) => {
+        impl<const N: usize> Add<$t> for BitVec<N> {
+            type Output = Self;
+            fn add(self, rhs: $t) -> Self { BitVec::from_u128(self.data.wrapping_add(rhs as u128)) }
+        }
+        impl<const N: usize> Sub<$t> for BitVec<N> {
+            type Output = Self;
+            fn sub(self, rhs: $t) -> Self { BitVec::from_u128(self.data.wrapping_sub(rhs as u128)) }
+        }
+        impl<const N: usize> Mul<$t> for BitVec<N> {
+            type Output = Self;
+            fn mul(self, rhs: $t) -> Self { BitVec::from_u128(self.data.wrapping_mul(rhs as u128)) }
+        }
+        impl<const N: usize> Add<BitVec<N>> for $t {
+            type Output = BitVec<N>;
+            fn add(self, rhs: BitVec<N>) -> BitVec<N> { BitVec::from_u128((self as u128).wrapping_add(rhs.data)) }
+        }
+        impl<const N: usize> Sub<BitVec<N>> for $t {
+            type Output = BitVec<N>;
+            fn sub(self, rhs: BitVec<N>) -> BitVec<N> { BitVec::from_u128((self as u128).wrapping_sub(rhs.data)) }
+        }
+        impl<const N: usize> Mul<BitVec<N>> for $t {
+            type Output = BitVec<N>;
+            fn mul(self, rhs: BitVec<N>) -> BitVec<N> { BitVec::from_u128((self as u128).wrapping_mul(rhs.data)) }
+        }
+    };
+}
+
+impl_bitvec_mixed_arith!(i8);
+impl_bitvec_mixed_arith!(i16);
+impl_bitvec_mixed_arith!(i32);
+impl_bitvec_mixed_arith!(i64);
+impl_bitvec_mixed_arith!(i128);
+impl_bitvec_mixed_arith!(u8);
+impl_bitvec_mixed_arith!(u16);
+impl_bitvec_mixed_arith!(u32);
+impl_bitvec_mixed_arith!(u64);
+impl_bitvec_mixed_arith!(u128);
+impl_bitvec_mixed_arith!(usize);
+impl_bitvec_mixed_arith!(isize);
 
 // ── Comparison with primitives ─────────────────────────────────────────────────
 
@@ -451,5 +505,85 @@ mod tests {
         assert!(a < b);
         assert!(b > a);
         assert_eq!(a, a);
+    }
+
+    // ── BV-7: bit_width and SInt sign-extension ───────────────────────────────
+
+    #[test]
+    fn test_bit_width_primitives() {
+        assert_eq!(AslValue::asl_bit_width(0u8), 8);
+        assert_eq!(AslValue::asl_bit_width(0u16), 16);
+        assert_eq!(AslValue::asl_bit_width(0u32), 32);
+        assert_eq!(AslValue::asl_bit_width(0u64), 64);
+        assert_eq!(AslValue::asl_bit_width(0u128), 128);
+        assert_eq!(AslValue::asl_bit_width(0i8), 8);
+        assert_eq!(AslValue::asl_bit_width(0i64), 64);
+        assert_eq!(AslValue::asl_bit_width(0i128), 128);
+        assert_eq!(AslValue::asl_bit_width(false), 1);
+    }
+
+    #[test]
+    fn test_bit_width_bitvec() {
+        let v4: BitVec<4> = BitVec::zero();
+        let v32: BitVec<32> = BitVec::zero();
+        let v128: BitVec<128> = BitVec::zero();
+        assert_eq!(v4.asl_bit_width(), 4);
+        assert_eq!(v32.asl_bit_width(), 32);
+        assert_eq!(v128.asl_bit_width(), 128);
+    }
+
+    // ── BV-8: mixed-type arithmetic ───────────────────────────────────────────
+
+    #[test]
+    fn test_bitvec_add_i128() {
+        // BitVec<8> + i128
+        let a: BitVec<8> = BitVec::from_u64(10);
+        let b = a + 5_i128;
+        assert_eq!(b.to_u128(), 15);
+    }
+
+    #[test]
+    fn test_bitvec_add_wraps() {
+        // Wrap at N bits: BitVec<4> + 1 wrapping from 15 → 0
+        let a: BitVec<4> = BitVec::from_u64(15);
+        let b = a + 1_i32;
+        assert_eq!(b.to_u128(), 0);
+    }
+
+    #[test]
+    fn test_bitvec_sub_i128() {
+        let a: BitVec<8> = BitVec::from_u64(10);
+        let b = a - 3_i128;
+        assert_eq!(b.to_u128(), 7);
+    }
+
+    #[test]
+    fn test_bitvec_mul_i128() {
+        let a: BitVec<8> = BitVec::from_u64(6);
+        let b = a * 7_i128;
+        assert_eq!(b.to_u128(), 42);
+    }
+
+    #[test]
+    fn test_i128_add_bitvec() {
+        // i128 + BitVec<8> → BitVec<8>
+        let a: BitVec<8> = BitVec::from_u64(10);
+        let b: BitVec<8> = 5_i128 + a;
+        assert_eq!(b.to_u128(), 15);
+    }
+
+    #[test]
+    fn test_i128_sub_bitvec() {
+        // 10_i128 - BitVec<8>(3) → BitVec<8>(7)
+        let a: BitVec<8> = BitVec::from_u64(3);
+        let b: BitVec<8> = 10_i128 - a;
+        assert_eq!(b.to_u128(), 7);
+    }
+
+    #[test]
+    fn test_u64_add_bitvec() {
+        let a: BitVec<8> = BitVec::from_u64(4);
+        let b: BitVec<8> = 8_u64 + a;
+        assert_eq!(b.to_u128(), 12);
     }
 }

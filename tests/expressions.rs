@@ -56,3 +56,14 @@ fn lval_tuple() {
     let out = run_compiler("definitions", "examples/lval_tuple.asl");
     assert!(out.contains("(a, b) = (b, a);"), "missing tuple lvalue:\n{out}");
 }
+
+// BV-9: IN mask → inline bitmask comparison
+#[test]
+fn expr_in_mask() {
+    let out = run_compiler("definitions", "examples/expr_in_mask.asl");
+    // '0xx1': bit 3 fixed to 0, bit 0 fixed to 1 → mask=0x9, expected=0x1
+    assert!(
+        out.contains("AslValue::to_u128(x) & 0x9u128) == 0x1u128"),
+        "expected inline mask comparison:\n{out}"
+    );
+}

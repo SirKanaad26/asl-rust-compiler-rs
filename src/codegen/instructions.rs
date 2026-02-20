@@ -37,7 +37,7 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         // Numeric conversion stubs — accept any AslValue so u64, i128, and
         // BitVec<N> all flow through without explicit casts in generated code.
         ("fn UInt(x: impl AslValue) -> i128",              "x.to_u128() as i128"),
-        ("fn SInt(x: impl AslValue) -> i128",              "x.to_u128() as i128 /* TODO: sign-extend by field width */"),
+        ("fn SInt(x: impl AslValue) -> i128",              "{ let w = x.asl_bit_width(); let v = x.to_u128(); if w == 0 || (v >> (w - 1)) & 1 == 0 { v as i128 } else { (v | !((1u128 << w).wrapping_sub(1))) as i128 } }"),
         ("fn IsZero(x: impl AslValue) -> bool",            "x.to_u128() == 0"),
         ("fn IsOnes(x: impl AslValue) -> bool",            "x.to_u64() == u64::MAX"),
         ("fn Zeros(_n: impl AslValue) -> i128",            "0"),

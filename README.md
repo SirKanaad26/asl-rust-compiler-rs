@@ -25,6 +25,18 @@ cargo run -- examples/minimal.asl output/minimal.rs
 cargo run -- examples/register_bitfield.asl output/registers.rs
 ```
 
+## Testing
+
+```bash
+# Run all integration tests
+cargo test
+
+# Run bitvec unit tests under nightly (requires rustup nightly toolchain)
+# Tests BV-1 through BV-8: slice, concat, AslValue, mixed-type arithmetic, etc.
+rustc +nightly --edition 2021 --crate-type lib --test src/runtime/test_bitvec.rs -o /tmp/bitvec_test
+/tmp/bitvec_test
+```
+
 ## Regenerate Parser (after grammar changes)
 ```
 java -jar antlr4-4.8-2-SNAPSHOT-complete.jar -Dlanguage=Rust -visitor -o src/parser grammar/asl.g4
