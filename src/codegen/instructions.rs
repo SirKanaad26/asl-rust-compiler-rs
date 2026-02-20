@@ -39,6 +39,7 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn HaveSVE() -> bool",                  "false"),
         ("fn HaveSVE2() -> bool",                 "false"),
         ("fn HaveMTE() -> bool",                  "false"),
+        ("fn asl_mod(a: i64, b: i64) -> i64",     "((a % b) + b) % b"),
     ] {
         emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));

@@ -43,6 +43,7 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
             let op_text = ctx.operator.as_ref().unwrap().get_text();
             match &*op_text {
                 "++" | ":" => format!("concat_bits({}, {})", lhs, rhs),
+                "MOD" => format!("asl_mod({}, {})", lhs, rhs),
                 _ => {
                     let op = map_binop(&op_text);
                     format!("{} {} {}", lhs, op, rhs)
@@ -249,7 +250,6 @@ fn map_binop(op: &str) -> &str {
         ">>" => ">>",
         "<<" => "<<",
         "DIV" => "/",
-        "MOD" => "%",
         other => other,
     }
 }
