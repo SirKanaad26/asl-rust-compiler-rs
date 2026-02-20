@@ -513,6 +513,9 @@ fn reg_write_setter(lval: &Rc<LValExprContextAll<'_>>) -> Option<(String, String
                 let setter = match name.as_str() {
                     "X" => "set_Xreg",
                     "W" => "set_Wreg",
+                    "R" => "set_Rreg",
+                    "S" => "set_Sreg",
+                    "D" => "set_Dreg",
                     _ => return None,
                 };
                 return Some((setter.to_string(), idx));

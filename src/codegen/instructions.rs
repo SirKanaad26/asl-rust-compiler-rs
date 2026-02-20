@@ -50,7 +50,10 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.emit("// ── CPU state ───────────────────────────────────────────────────────────────");
     emitter.emit("pub struct CpuState {");
     emitter.indent();
-    emitter.emit("pub X: [u64; 32],");
+    emitter.emit("pub X: [u64; 32],");   // AArch64 64-bit GPRs
+    emitter.emit("pub R: [u64; 16],");   // AArch32 32-bit GPRs
+    emitter.emit("pub S: [u64; 32],");   // VFP single-precision
+    emitter.emit("pub D: [u64; 32],");   // VFP double-precision
     emitter.emit("pub SP: u64,");
     emitter.emit("pub PC: u64,");
     // PSTATE flags
@@ -74,7 +77,7 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.indent();
     emitter.emit("pub fn new() -> Self {");
     emitter.indent();
-    emitter.emit("CpuState { X: [0u64; 32], SP: 0, PC: 0,");
+    emitter.emit("CpuState { X: [0u64; 32], R: [0u64; 16], S: [0u64; 32], D: [0u64; 32], SP: 0, PC: 0,");
     emitter.emit("    N: false, Z: false, C: false, V: false,");
     emitter.emit("    EL: 0, M: 0, T: false, nRW: false,");
     emitter.emit("    SS: false, IL: false, D: false, A: false, I: false, F: false }");
@@ -83,10 +86,16 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.dedent();
     emitter.emit("}");
     for (sig, body) in &[
-        ("fn Xreg(cpu: &CpuState, n: u64) -> u64",          "cpu.X[n as usize]"),
-        ("fn Wreg(cpu: &CpuState, n: u64) -> u64",          "cpu.X[n as usize] & 0xFFFF_FFFF"),
+        ("fn Xreg(cpu: &CpuState, n: u64) -> u64",           "cpu.X[n as usize]"),
+        ("fn Wreg(cpu: &CpuState, n: u64) -> u64",           "cpu.X[n as usize] & 0xFFFF_FFFF"),
         ("fn set_Xreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.X[n as usize] = val"),
         ("fn set_Wreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.X[n as usize] = val & 0xFFFF_FFFF"),
+        ("fn Rreg(cpu: &CpuState, n: u64) -> u64",           "cpu.R[n as usize]"),
+        ("fn set_Rreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.R[n as usize] = val & 0xFFFF_FFFF"),
+        ("fn Sreg(cpu: &CpuState, n: u64) -> u64",           "cpu.S[n as usize]"),
+        ("fn set_Sreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.S[n as usize] = val"),
+        ("fn Dreg(cpu: &CpuState, n: u64) -> u64",           "cpu.D[n as usize]"),
+        ("fn set_Dreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.D[n as usize] = val"),
     ] {
         emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));

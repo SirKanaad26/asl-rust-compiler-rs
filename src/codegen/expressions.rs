@@ -82,6 +82,9 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
                 match obj.as_str() {
                     "X" => return format!("Xreg(cpu, {})", slices[0]),
                     "W" => return format!("Wreg(cpu, {})", slices[0]),
+                    "R" => return format!("Rreg(cpu, {})", slices[0]),
+                    "S" => return format!("Sreg(cpu, {})", slices[0]),
+                    "D" => return format!("Dreg(cpu, {})", slices[0]),
                     _ => {}
                 }
             }
