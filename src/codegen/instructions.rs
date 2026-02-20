@@ -27,8 +27,8 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.emit("#![allow(non_snake_case, dead_code, unused_variables, unused_mut)]");
     emitter.emit("// ── ASL built-in runtime stubs ──────────────────────────────────────────────");
     for (sig, body) in &[
-        ("fn UInt(x: u64) -> i64",               "x as i64"),
-        ("fn SInt(x: u64) -> i64",               "x as i64 /* TODO: sign-extend by field width */"),
+        ("fn UInt(x: u64) -> i128",              "x as i128"),
+        ("fn SInt(x: u64) -> i128",              "x as i128 /* TODO: sign-extend by field width */"),
         ("fn IsZero(x: u64) -> bool",             "x == 0"),
         ("fn IsOnes(x: u64) -> bool",             "x == u64::MAX"),
         ("fn Zeros(_n: u64) -> u64",              "0"),
@@ -39,7 +39,7 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn HaveSVE() -> bool",                  "false"),
         ("fn HaveSVE2() -> bool",                 "false"),
         ("fn HaveMTE() -> bool",                  "false"),
-        ("fn asl_mod(a: i64, b: i64) -> i64",     "((a % b) + b) % b"),
+        ("fn asl_mod(a: i128, b: i128) -> i128",  "((a % b) + b) % b"),
     ] {
         emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));

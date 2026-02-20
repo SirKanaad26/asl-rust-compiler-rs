@@ -4,7 +4,7 @@ use common::run_compiler;
 #[test]
 fn if_statement() {
     let out = run_compiler("definitions", "examples/stmt_if.asl");
-    assert!(out.contains("pub fn TestIf(x: i64) -> i64 {"), "missing TestIf signature:\n{out}");
+    assert!(out.contains("pub fn TestIf(x: i128) -> i128 {"), "missing TestIf signature:\n{out}");
     assert!(out.contains("if x > 0 {"), "missing if branch:\n{out}");
     assert!(out.contains("} else if x == 0 {"), "missing elsif branch:\n{out}");
     assert!(out.contains("} else {"), "missing else branch:\n{out}");
@@ -14,7 +14,7 @@ fn if_statement() {
 #[test]
 fn assert_statement() {
     let out = run_compiler("definitions", "examples/stmt_assert.asl");
-    assert!(out.contains("pub fn EnsurePositive(n: i64) -> i64 {"), "missing EnsurePositive signature:\n{out}");
+    assert!(out.contains("pub fn EnsurePositive(n: i128) -> i128 {"), "missing EnsurePositive signature:\n{out}");
     assert!(out.contains("assert!(n > 0);"), "missing assert statement:\n{out}");
     assert!(out.contains("return n;"), "missing return statement:\n{out}");
 }

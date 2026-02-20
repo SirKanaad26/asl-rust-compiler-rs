@@ -11,7 +11,7 @@ pub fn map_type(type_ctx: &Rc<TypeSpecContextAll<'_>>) -> String {
         TypeSpecContextAll::TypeRefContext(ctx) => {
             let name = ctx.get_text();
             match name.as_str() {
-                "integer" => "i64".to_string(),
+                "integer" => "i128".to_string(),
                 "boolean" => "bool".to_string(),
                 "real" => "f64".to_string(),
                 "string" => "String".to_string(),
@@ -63,7 +63,7 @@ pub fn map_type(type_ctx: &Rc<TypeSpecContextAll<'_>>) -> String {
 /// Return a const-compatible default value for a Rust type string
 pub fn default_value_for(rust_type: &str) -> String {
     match rust_type {
-        "i64" => "0".to_string(),
+        "i128" => "0".to_string(),
         "bool" => "false".to_string(),
         "f64" => "0.0".to_string(),
         "String" => "String::new()".to_string(),
