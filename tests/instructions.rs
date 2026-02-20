@@ -34,6 +34,15 @@ fn instruction_guard() {
 }
 
 #[test]
+fn instruction_conditional() {
+    let out = run_compiler("instructions", "examples/instruction_conditional.asl");
+    // check_condition stub must be emitted after CpuState
+    assert!(out.contains("pub fn check_condition(cpu: &CpuState) -> bool"), "expected check_condition stub:\n{out}");
+    // execute body must be wrapped
+    assert!(out.contains("if check_condition(cpu) {"), "expected conditional wrapper in execute:\n{out}");
+}
+
+#[test]
 fn instruction_simple() {
     let out = run_compiler("instructions", "examples/instruction_simple.asl");
     assert!(out.contains("pub struct TestEncoding"), "expected encoding struct:\n{out}");

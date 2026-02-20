@@ -96,6 +96,8 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn set_Sreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.S[n as usize] = val"),
         ("fn Dreg(cpu: &CpuState, n: u64) -> u64",           "cpu.VD[n as usize]"),
         ("fn set_Dreg(cpu: &mut CpuState, n: u64, val: u64)", "cpu.VD[n as usize] = val"),
+        ("fn check_condition(cpu: &CpuState) -> bool",
+         "true /* TODO: evaluate CPSR/PSTATE condition codes against N/Z/C/V */"),
     ] {
         emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
@@ -281,15 +283,17 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
     // Execute function — receives the decoded struct; shadows fields so body uses bare names
     emitter.emit("");
     emitter.emit(&format!("// Execute: {}", instr_name));
-    if instr.conditional.is_some() {
-        emitter.emit("// __conditional: instruction is conditionally executed");
-    }
     emitter.emit(&format!(
         "pub fn execute_{}(enc: &{}, cpu: &mut CpuState) {{",
         instr_name_safe, enc_type
     ));
     emitter.indent();
     emit_field_shadows(emitter, &first_raw_fields, &first_decode_vars);
+    let is_conditional = instr.conditional.is_some();
+    if is_conditional {
+        emitter.emit("if check_condition(cpu) {");
+        emitter.indent();
+    }
     if let Some(block) = &instr.executeBlock {
         let stmts = block.stmt_all();
         if stmts.is_empty() {
@@ -304,6 +308,10 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         }
     } else {
         emitter.emit(&format!("todo!(\"execute {}\");", instr_name));
+    }
+    if is_conditional {
+        emitter.dedent();
+        emitter.emit("}");
     }
     emitter.dedent();
     emitter.emit("}");
