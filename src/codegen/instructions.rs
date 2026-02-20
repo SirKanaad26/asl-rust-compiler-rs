@@ -1,10 +1,11 @@
+use std::collections::HashSet;
 use std::rc::Rc;
 use antlr_rust::tree::ParseTree;
 use antlr_rust::token::Token;
 
 use crate::codegen::emitter::CodeEmitter;
 use crate::codegen::expressions::generate_expr;
-use crate::codegen::statements::{generate_stmt, generate_stmt_in_decode};
+use crate::codegen::statements::{collect_implicit_decls, generate_stmt, generate_stmt_in_decode};
 use crate::codegen::types::map_type;
 use crate::parser::aslparser::{
     InstructionContextAll,
@@ -270,7 +271,15 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.emit(&format!("pub fn postdecode_{}(enc: &{}) {{", instr_name_safe, enc_type));
         emitter.indent();
         emit_field_shadows(emitter, &first_raw_fields, &first_decode_vars);
-        for stmt in block.stmt_all() {
+        let shadow_names: HashSet<String> = first_raw_fields.iter()
+            .map(|(n, _, _)| n.clone())
+            .chain(first_decode_vars.iter().map(|(n, _)| n.clone()))
+            .collect();
+        let postdecode_stmts = block.stmt_all();
+        for name in collect_implicit_decls(&postdecode_stmts, &shadow_names) {
+            emitter.emit(&format!("let mut {} = Default::default();", name));
+        }
+        for stmt in postdecode_stmts {
             let deferred = generate_stmt(emitter, &stmt);
             for d in deferred {
                 generate_stmt(emitter, &d);
@@ -289,6 +298,15 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
     ));
     emitter.indent();
     emit_field_shadows(emitter, &first_raw_fields, &first_decode_vars);
+    let execute_shadow_names: HashSet<String> = first_raw_fields.iter()
+        .map(|(n, _, _)| n.clone())
+        .chain(first_decode_vars.iter().map(|(n, _)| n.clone()))
+        .collect();
+    if let Some(block) = &instr.executeBlock {
+        for name in collect_implicit_decls(&block.stmt_all(), &execute_shadow_names) {
+            emitter.emit(&format!("let mut {} = Default::default();", name));
+        }
+    }
     let is_conditional = instr.conditional.is_some();
     if is_conditional {
         emitter.emit("if check_condition(cpu) {");

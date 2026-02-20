@@ -34,6 +34,16 @@ fn instruction_guard() {
 }
 
 #[test]
+fn instruction_implicit_decl() {
+    let out = run_compiler("instructions", "examples/instruction_implicit_decl.asl");
+    // `result` is assigned but never declared — must be hoisted
+    assert!(out.contains("let mut result = Default::default();"), "expected implicit decl:\n{out}");
+    // Field shadows (d, n) must NOT be double-declared as implicit
+    assert!(!out.contains("let mut d = Default::default();"), "d is a field shadow, should not be implicit:\n{out}");
+    assert!(!out.contains("let mut n = Default::default();"), "n is a field shadow, should not be implicit:\n{out}");
+}
+
+#[test]
 fn instruction_conditional() {
     let out = run_compiler("instructions", "examples/instruction_conditional.asl");
     // check_condition stub must be emitted after CpuState

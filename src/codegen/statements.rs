@@ -2,6 +2,7 @@ use antlr_rust::parser_rule_context::ParserRuleContext;
 use antlr_rust::token::Token;
 use antlr_rust::tree::ParseTree;
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -541,5 +542,78 @@ fn generate_catch_alt_body<'a>(
             generate_block_or_embed1(emitter, embed1);
             vec![]
         }
+    }
+}
+
+/// Pre-scan a flat list of top-level stmts to find variable names that are
+/// assigned but never explicitly declared.  Returns names in first-seen order,
+/// each needing a `let mut x = Default::default();` hoisted before the body.
+///
+/// `known` contains names already in scope: field shadows, function params, etc.
+pub fn collect_implicit_decls(
+    stmts: &[Rc<StmtContextAll<'_>>],
+    known: &HashSet<String>,
+) -> Vec<String> {
+    let mut declared: HashSet<String> = HashSet::new();
+    let mut assigned: Vec<String> = Vec::new();
+
+    for stmt in stmts {
+        if let StmtContextAll::StmtsInlineContext(ctx) = stmt.as_ref() {
+            if let Some(inline) = ctx.inlineStmt() {
+                match inline.as_ref() {
+                    InlineStmtContextAll::StmtVarDeclInitContext(vctx) => {
+                        if let Some(sym) = vctx.symDecl() {
+                            if let Some(id) = sym.id() {
+                                declared.insert(id.get_text());
+                            }
+                        }
+                    }
+                    InlineStmtContextAll::StmtConstDeclContext(vctx) => {
+                        if let Some(sym) = vctx.symDecl() {
+                            if let Some(id) = sym.id() {
+                                declared.insert(id.get_text());
+                            }
+                        }
+                    }
+                    InlineStmtContextAll::StmtAssignContext(actx) => {
+                        if let Some(lval) = actx.lValExpr() {
+                            collect_lval_simple_names(&lval, &mut assigned);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let mut seen = HashSet::new();
+    assigned
+        .into_iter()
+        .filter(|name| {
+            !declared.contains(name) && !known.contains(name) && seen.insert(name.clone())
+        })
+        .collect()
+}
+
+/// Collect bare variable names from an lvalue (simple var refs and tuples only).
+/// Skips member access, array index, PSTATE, and register family names.
+fn collect_lval_simple_names(lval: &Rc<LValExprContextAll<'_>>, names: &mut Vec<String>) {
+    match lval.as_ref() {
+        LValExprContextAll::LValVarRefContext(ctx) => {
+            if let Some(qid) = ctx.qualId() {
+                let name = qid.get_text().replace('.', "_");
+                // Skip PSTATE (mapped to cpu.*) and register families (X, W, R, S, D)
+                match name.as_str() {
+                    "PSTATE" | "X" | "W" | "R" | "S" | "D" => {}
+                    _ => names.push(name),
+                }
+            }
+        }
+        LValExprContextAll::LValTupleContext(ctx) => {
+            for elem in ctx.lValExpr_all() {
+                collect_lval_simple_names(&elem, names);
+            }
+        }
+        _ => {} // member access (PSTATE.N), array index (X[n]), slice, etc.
     }
 }
