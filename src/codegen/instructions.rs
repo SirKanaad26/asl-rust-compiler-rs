@@ -5,19 +5,70 @@ use antlr_rust::token::Token;
 use crate::codegen::emitter::CodeEmitter;
 use crate::codegen::expressions::generate_expr;
 use crate::codegen::statements::generate_stmt;
+use crate::codegen::types::map_type;
 use crate::parser::aslparser::{
     InstructionContextAll,
     InstructionContextAttrs,
     EncodingContextAttrs,
     InstructionFieldContextAttrs,
+    IndentedBlockContextAll,
     IndentedBlockContextAttrs,
+    StmtContextAll,
+    StmtsInlineContextAttrs,
+    InlineStmtContextAll,
+    StmtVarDeclInitContextAttrs,
+    SymDeclContextAttrs,
 };
+
+/// Scan a decode block for top-level variable declarations, returning (name, rust_type) pairs.
+/// These vars need to be stored in the encoding struct so execute/postdecode can access them.
+fn collect_decode_vars(decode: &Option<Rc<IndentedBlockContextAll<'_>>>) -> Vec<(String, String)> {
+    let mut vars = Vec::new();
+    let block = match decode {
+        Some(b) => b,
+        None => return vars,
+    };
+    for stmt in block.stmt_all() {
+        if let StmtContextAll::StmtsInlineContext(ctx) = stmt.as_ref() {
+            if let Some(inline) = ctx.inlineStmt() {
+                if let InlineStmtContextAll::StmtVarDeclInitContext(vctx) = inline.as_ref() {
+                    let sym = vctx.symDecl().unwrap();
+                    let ty = map_type(&sym.typeSpec().unwrap());
+                    let name = sym.id().unwrap().get_text();
+                    vars.push((name, ty));
+                }
+            }
+        }
+    }
+    vars
+}
+
+/// Emit shadowing lets at the top of execute/postdecode so the body can use bare names.
+fn emit_field_shadows(
+    emitter: &mut CodeEmitter,
+    raw_fields: &[(String, u64, u64)],
+    decode_vars: &[(String, String)],
+) {
+    for (name, _, _) in raw_fields {
+        emitter.emit(&format!("let {} = enc.{};", name, name));
+    }
+    for (name, _) in decode_vars {
+        emitter.emit(&format!("let {} = enc.{};", name, name));
+    }
+}
 
 pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionContextAll<'_>>) {
     let instr_name = instr.idWithDots().unwrap().get_text();
     let instr_name_safe = instr_name.replace('.', "_");
 
     emitter.emit(&format!("// Instruction: {}", instr_name));
+
+    // Track the first encoding's name and field sets for postdecode/execute signatures.
+    // All encodings of an instruction compute the same variable names (ARM spec convention),
+    // so using the first encoding's struct for postdecode/execute is correct in practice.
+    let mut first_enc_name_safe: Option<String> = None;
+    let mut first_raw_fields: Vec<(String, u64, u64)> = Vec::new();
+    let mut first_decode_vars: Vec<(String, String)> = Vec::new();
 
     for enc in instr.encoding_all() {
         let enc_name = enc.idWithDots().unwrap().get_text();
@@ -27,7 +78,7 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.emit("");
         emitter.emit(&format!("// Encoding: {} ({})", enc_name, inst_set));
 
-        // Collect fields: (name, start_bit, bit_length)
+        // Collect raw bit fields: (name, start_bit, bit_length)
         let fields: Vec<(String, u64, u64)> = enc
             .instructionField_all()
             .iter()
@@ -39,11 +90,23 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
             })
             .collect();
 
-        // Generate struct
+        // Collect variables declared in __decode (e.g. `integer d = UInt(Rd)`)
+        let decode_vars = collect_decode_vars(&enc.decode);
+
+        if first_enc_name_safe.is_none() {
+            first_enc_name_safe = Some(enc_name_safe.clone());
+            first_raw_fields = fields.clone();
+            first_decode_vars = decode_vars.clone();
+        }
+
+        // Generate struct: raw bit fields + decode-computed vars
         emitter.emit(&format!("pub struct {} {{", enc_name_safe));
         emitter.indent();
         for (name, _, _) in &fields {
             emitter.emit(&format!("pub {}: u64,", name));
+        }
+        for (name, ty) in &decode_vars {
+            emitter.emit(&format!("pub {}: {},", name, ty));
         }
         emitter.dedent();
         emitter.emit("}");
@@ -81,7 +144,7 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
             emitter.emit(&format!("if !({}) {{ return None; }}", guard_str));
         }
 
-        // Decode block statements
+        // Decode block statements (declare and compute the decode vars)
         if let Some(block) = &enc.decode {
             for stmt in block.stmt_all() {
                 let deferred = generate_stmt(emitter, &stmt);
@@ -91,12 +154,16 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
             }
         }
 
-        // Return constructed value
-        if fields.is_empty() {
+        // Return struct populated with raw fields + decode-computed vars
+        let all_names: Vec<String> = fields
+            .iter()
+            .map(|(n, _, _)| n.clone())
+            .chain(decode_vars.iter().map(|(n, _)| n.clone()))
+            .collect();
+        if all_names.is_empty() {
             emitter.emit("Some(Self {})");
         } else {
-            let field_names: Vec<String> = fields.iter().map(|(n, _, _)| n.clone()).collect();
-            emitter.emit(&format!("Some(Self {{ {} }})", field_names.join(", ")));
+            emitter.emit(&format!("Some(Self {{ {} }})", all_names.join(", ")));
         }
 
         emitter.dedent();
@@ -105,12 +172,15 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.emit("}");
     }
 
-    // Postdecode function (shared logic run after any encoding's decode)
+    let enc_type = first_enc_name_safe.as_deref().unwrap_or("/* unknown */");
+
+    // Postdecode function — receives the decoded struct; shadows fields so body uses bare names
     if let Some(block) = &instr.postDecodeBlock {
         emitter.emit("");
         emitter.emit(&format!("// Postdecode: {}", instr_name));
-        emitter.emit(&format!("pub fn postdecode_{}() {{", instr_name_safe));
+        emitter.emit(&format!("pub fn postdecode_{}(enc: &{}) {{", instr_name_safe, enc_type));
         emitter.indent();
+        emit_field_shadows(emitter, &first_raw_fields, &first_decode_vars);
         for stmt in block.stmt_all() {
             let deferred = generate_stmt(emitter, &stmt);
             for d in deferred {
@@ -121,17 +191,18 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.emit("}");
     }
 
-    // Execute function
+    // Execute function — receives the decoded struct; shadows fields so body uses bare names
     emitter.emit("");
     emitter.emit(&format!("// Execute: {}", instr_name));
     if instr.conditional.is_some() {
         emitter.emit("// __conditional: instruction is conditionally executed");
     }
     emitter.emit(&format!(
-        "pub fn execute_{}(/* TODO: cpu state */) {{",
-        instr_name_safe
+        "pub fn execute_{}(enc: &{}) {{",
+        instr_name_safe, enc_type
     ));
     emitter.indent();
+    emit_field_shadows(emitter, &first_raw_fields, &first_decode_vars);
     if let Some(block) = &instr.executeBlock {
         let stmts = block.stmt_all();
         if stmts.is_empty() {
