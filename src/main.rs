@@ -14,7 +14,7 @@ fn main() {
 
     if args.len() < 4 {
         eprintln!("Usage: {} <mode> <input.asl> <output.rs>", args[0]);
-        eprintln!("Modes: registers, definitions");
+        eprintln!("Modes: registers, definitions, instructions");
         std::process::exit(1);
     }
 
@@ -92,6 +92,12 @@ fn main() {
                         emitter.emit(&format!("// TODO: {:?}", def.get_text()));
                     }
                 }
+            }
+        }
+        "instructions" => {
+            let tree = parser.instructions().expect("Parse failed");
+            for instr in tree.instruction_all() {
+                codegen::instructions::generate_instruction(&mut emitter, &instr);
             }
         }
         _ => {
