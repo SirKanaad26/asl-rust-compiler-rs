@@ -3,7 +3,7 @@ use common::run_compiler;
 
 #[test]
 fn if_statement() {
-    let out = run_compiler("definitions", "examples/stmt_if.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_if.asl");
     assert!(out.contains("pub fn TestIf(x: i128) -> i128 {"), "missing TestIf signature:\n{out}");
     assert!(out.contains("if x > 0 {"), "missing if branch:\n{out}");
     assert!(out.contains("} else if x == 0 {"), "missing elsif branch:\n{out}");
@@ -13,7 +13,7 @@ fn if_statement() {
 
 #[test]
 fn assert_statement() {
-    let out = run_compiler("definitions", "examples/stmt_assert.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_assert.asl");
     assert!(out.contains("pub fn EnsurePositive(n: i128) -> i128 {"), "missing EnsurePositive signature:\n{out}");
     assert!(out.contains("assert!(n > 0);"), "missing assert statement:\n{out}");
     assert!(out.contains("return n;"), "missing return statement:\n{out}");
@@ -21,7 +21,7 @@ fn assert_statement() {
 
 #[test]
 fn for_statement() {
-    let out = run_compiler("definitions", "examples/stmt_for.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_for.asl");
     assert!(out.contains("for i in 0..=n {"), "missing for loop:\n{out}");
     assert!(out.contains("n = n + i;"), "missing for body:\n{out}");
     assert!(out.contains("    return n;"), "return should be outside for loop:\n{out}");
@@ -29,14 +29,14 @@ fn for_statement() {
 
 #[test]
 fn while_statement() {
-    let out = run_compiler("definitions", "examples/stmt_while.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_while.asl");
     assert!(out.contains("while n > 0 {"), "missing while condition:\n{out}");
     assert!(out.contains("n = n - 1;"), "missing loop body:\n{out}");
 }
 
 #[test]
 fn repeat_until_statement() {
-    let out = run_compiler("definitions", "examples/stmt_repeat.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_repeat.asl");
     assert!(out.contains("loop {"), "missing loop:\n{out}");
     assert!(out.contains("n = n - 1;"), "missing loop body:\n{out}");
     assert!(out.contains("if n == 0 { break; }"), "missing until break:\n{out}");
@@ -45,7 +45,7 @@ fn repeat_until_statement() {
 
 #[test]
 fn case_statement() {
-    let out = run_compiler("definitions", "examples/stmt_case.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_case.asl");
     assert!(out.contains("match opcode {"), "missing match:\n{out}");
     assert!(out.contains("0 => {"), "missing when 0 arm:\n{out}");
     assert!(out.contains("1 | 2 => {"), "missing when 1,2 arm:\n{out}");
@@ -57,7 +57,7 @@ fn case_statement() {
 
 #[test]
 fn try_catch_statement() {
-    let out = run_compiler("definitions", "examples/stmt_try.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_try.asl");
     assert!(out.contains("catch_unwind"), "missing catch_unwind:\n{out}");
     assert!(out.contains("AssertUnwindSafe"), "missing AssertUnwindSafe:\n{out}");
     assert!(out.contains("downcast_ref::<&str>()"), "missing &str downcast:\n{out}");
@@ -70,14 +70,14 @@ fn try_catch_statement() {
 
 #[test]
 fn inline_enum() {
-    let out = run_compiler("definitions", "examples/stmt_inline_enum.asl");
+    let out = run_compiler("definitions", "examples/stmt/stmt_inline_enum.asl");
     assert!(out.contains("enum Direction { Up, Down, Left, Right }"), "missing inline enum:\n{out}");
     assert!(out.contains("#[derive(Debug, Clone, Copy, PartialEq)]"), "missing derive:\n{out}");
 }
 
 #[test]
 fn stmt_stubs() {
-    let out = run_compiler("definitions", "examples/stubs.asl");
+    let out = run_compiler("definitions", "examples/defs/stubs.asl");
     assert!(out.contains("panic!(\"UNPREDICTABLE\");"), "missing UNPREDICTABLE:\n{out}");
     assert!(out.contains("panic!(\"UNDEFINED\");"), "missing UNDEFINED:\n{out}");
     assert!(out.contains("panic!(\"IMPLEMENTATION_DEFINED\");"), "missing IMPLEMENTATION_DEFINED:\n{out}");

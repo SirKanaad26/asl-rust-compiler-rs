@@ -3,7 +3,7 @@ use common::run_compiler;
 
 #[test]
 fn instruction_runtime_stubs() {
-    let out = run_compiler("instructions", "examples/instruction_execute.asl");
+    let out = run_compiler("instructions", "examples/instr/instruction_execute.asl");
     // Runtime is now in a separate module — check for module declaration and import
     assert!(out.contains("mod runtime;"), "expected mod runtime:\n{out}");
     assert!(out.contains("use runtime::*;"), "expected use runtime::*:\n{out}");
@@ -18,7 +18,7 @@ fn instruction_runtime_stubs() {
 
 #[test]
 fn instruction_execute() {
-    let out = run_compiler("instructions", "examples/instruction_execute.asl");
+    let out = run_compiler("instructions", "examples/instr/instruction_execute.asl");
     // Struct includes decode-computed vars
     assert!(out.contains("pub d: i128"), "expected decode var in struct:\n{out}");
     assert!(out.contains("Some(Self { Rd, Rn, d, n })"), "expected decode vars in Self:\n{out}");
@@ -33,20 +33,20 @@ fn instruction_execute() {
 
 #[test]
 fn instruction_guard() {
-    let out = run_compiler("instructions", "examples/instruction_guard.asl");
+    let out = run_compiler("instructions", "examples/instr/instruction_guard.asl");
     assert!(out.contains("if !(cond != 0b1111) { return None; }"), "expected guard check:\n{out}");
 }
 
 #[test]
 fn instruction_unpredictable_unless() {
-    let out = run_compiler("instructions", "examples/instruction_unpredictable_unless.asl");
+    let out = run_compiler("instructions", "examples/instr/instruction_unpredictable_unless.asl");
     assert!(out.contains("assert!((bits >> 6) & 1 == 0, \"UNPREDICTABLE\");"), "expected bit-6 check:\n{out}");
     assert!(out.contains("assert!((bits >> 11) & 1 == 1, \"UNPREDICTABLE\");"), "expected bit-11 check:\n{out}");
 }
 
 #[test]
 fn instruction_implicit_decl() {
-    let out = run_compiler("instructions", "examples/instruction_implicit_decl.asl");
+    let out = run_compiler("instructions", "examples/instr/instruction_implicit_decl.asl");
     // `result` is assigned but never declared — must be hoisted
     assert!(out.contains("let mut result = Default::default();"), "expected implicit decl:\n{out}");
     // Field shadows (d, n) must NOT be double-declared as implicit
@@ -56,7 +56,7 @@ fn instruction_implicit_decl() {
 
 #[test]
 fn instruction_conditional() {
-    let out = run_compiler("instructions", "examples/instruction_conditional.asl");
+    let out = run_compiler("instructions", "examples/instr/instruction_conditional.asl");
     // check_condition lives in runtime.rs now — generated file uses it via `use runtime::*`
     assert!(out.contains("use runtime::*;"), "expected use runtime::*:\n{out}");
     // execute body must still be wrapped with check_condition
@@ -65,7 +65,7 @@ fn instruction_conditional() {
 
 #[test]
 fn instruction_simple() {
-    let out = run_compiler("instructions", "examples/instruction_simple.asl");
+    let out = run_compiler("instructions", "examples/instr/instruction_simple.asl");
     assert!(out.contains("pub struct TestEncoding"), "expected encoding struct:\n{out}");
     assert!(out.contains("pub fn decode(bits: u64) -> Option<Self>"), "expected decode fn:\n{out}");
     assert!(out.contains("pub fn execute_TestInstruction(enc: &TestEncoding, cpu: &mut CpuState)"), "expected execute fn:\n{out}");
@@ -76,7 +76,7 @@ fn instruction_simple() {
 
 #[test]
 fn bv6_coercions() {
-    let out = run_compiler("instructions", "examples/bv6_coercions.asl");
+    let out = run_compiler("instructions", "examples/expr/bv6_coercions.asl");
     // AslValue trait imported so stubs and generated code can use it
     assert!(out.contains("use bitvec::{BitVec, AslValue}"), "expected AslValue import:\n{out}");
     // bits(64) decode var wrapped with BitVec::from_asl — NOT a direct cast
