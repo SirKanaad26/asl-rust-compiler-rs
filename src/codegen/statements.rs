@@ -1,7 +1,7 @@
 use antlr_rust::parser_rule_context::ParserRuleContext;
 use antlr_rust::token::Token;
 use antlr_rust::tree::ParseTree;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -15,6 +15,19 @@ use crate::parser::aslparser::*;
 // UNDEFINED in decode means the instruction doesn't exist → return None, not panic.
 thread_local! {
     static IN_DECODE_CTX: Cell<bool> = Cell::new(false);
+    // Names of variables that are implicitly declared via first assignment in __decode.
+    // These need `let mut name = rhs;` instead of bare `name = rhs;`.
+    static IMPLICIT_DECODE_VARS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
+/// Register the set of implicitly-declared decode vars before generating a decode block.
+/// Call with an empty set after the block to clear state.
+pub fn set_implicit_decode_vars(names: HashSet<String>) {
+    IMPLICIT_DECODE_VARS.with(|v| *v.borrow_mut() = names);
+}
+
+fn is_implicit_decode_var(name: &str) -> bool {
+    IMPLICIT_DECODE_VARS.with(|v| v.borrow().contains(name))
 }
 
 fn in_decode_ctx() -> bool {
@@ -268,6 +281,17 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
                     emitter.emit(&format!("// TODO: multi-slice write: {}", lval.get_text()));
                 }
             } else {
+                // In __decode blocks, an assignment to a bare name that was collected as
+                // an implicit decode var needs `let mut` (no explicit type annotation in ASL source).
+                if in_decode_ctx() {
+                    if let LValExprContextAll::LValVarRefContext(lref) = lval.as_ref() {
+                        let var_name = lref.qualId().unwrap().get_text();
+                        if is_implicit_decode_var(&var_name) {
+                            emitter.emit(&format!("let mut {} = {};", var_name, rhs));
+                            return;
+                        }
+                    }
+                }
                 let lhs = generate_lval(&lval);
                 emitter.emit(&format!("{} = {};", lhs, rhs));
             }

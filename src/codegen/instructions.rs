@@ -5,7 +5,7 @@ use antlr_rust::token::Token;
 
 use crate::codegen::emitter::CodeEmitter;
 use crate::codegen::expressions::generate_expr;
-use crate::codegen::statements::{collect_implicit_decls, generate_stmt, generate_stmt_in_decode};
+use crate::codegen::statements::{collect_implicit_decls, generate_stmt, generate_stmt_in_decode, set_implicit_decode_vars};
 use crate::codegen::types::map_type;
 use crate::parser::aslparser::{
     InstructionContextAll,
@@ -18,7 +18,10 @@ use crate::parser::aslparser::{
     StmtsInlineContextAttrs,
     InlineStmtContextAll,
     StmtVarDeclInitContextAttrs,
+    StmtAssignContextAttrs,
     SymDeclContextAttrs,
+    LValExprContextAll,
+    LValVarRefContextAttrs,
 };
 
 /// Emit stub implementations of common ASL built-in functions so the generated
@@ -118,27 +121,59 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.emit("");
 }
 
-/// Scan a decode block for top-level variable declarations, returning (name, rust_type) pairs.
-/// These vars need to be stored in the encoding struct so execute/postdecode can access them.
-fn collect_decode_vars(decode: &Option<Rc<IndentedBlockContextAll<'_>>>) -> Vec<(String, String)> {
-    let mut vars = Vec::new();
+/// Scan a decode block for top-level variable declarations, returning:
+/// - `Vec<(name, rust_type)>` — all vars to add to the encoding struct
+/// - `HashSet<String>` — names of *implicitly* declared vars (bare assignment, no type annotation)
+///
+/// Typed declarations (`integer d = UInt(Rd)`) are handled by `generate_inline_stmt` which
+/// already emits `let mut d: i128 = ...;`.  Implicit assignments (`m = UInt(Rm)`) also need
+/// `let mut` but have no type annotation — we infer `bool` for comparisons, `i128` otherwise.
+fn collect_decode_vars(decode: &Option<Rc<IndentedBlockContextAll<'_>>>) -> (Vec<(String, String)>, HashSet<String>) {
+    let mut vars: Vec<(String, String)> = Vec::new();
+    let mut implicit_names: HashSet<String> = HashSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
     let block = match decode {
         Some(b) => b,
-        None => return vars,
+        None => return (vars, implicit_names),
     };
     for stmt in block.stmt_all() {
         if let StmtContextAll::StmtsInlineContext(ctx) = stmt.as_ref() {
             if let Some(inline) = ctx.inlineStmt() {
-                if let InlineStmtContextAll::StmtVarDeclInitContext(vctx) = inline.as_ref() {
-                    let sym = vctx.symDecl().unwrap();
-                    let ty = map_type(&sym.typeSpec().unwrap());
-                    let name = sym.id().unwrap().get_text();
-                    vars.push((name, ty));
+                match inline.as_ref() {
+                    InlineStmtContextAll::StmtVarDeclInitContext(vctx) => {
+                        let sym = vctx.symDecl().unwrap();
+                        let ty = map_type(&sym.typeSpec().unwrap());
+                        let name = sym.id().unwrap().get_text();
+                        if seen.insert(name.clone()) {
+                            vars.push((name, ty));
+                        }
+                    }
+                    InlineStmtContextAll::StmtAssignContext(actx) => {
+                        if let Some(lval) = actx.lValExpr() {
+                            if let LValExprContextAll::LValVarRefContext(lref) = lval.as_ref() {
+                                let name = lref.qualId().unwrap().get_text();
+                                if seen.insert(name.clone()) {
+                                    // Infer type: bool for comparisons, i128 otherwise
+                                    let rhs_text = actx.expr()
+                                        .map(|e| e.get_text())
+                                        .unwrap_or_default();
+                                    let ty = if rhs_text.contains("==") || rhs_text.contains("!=") {
+                                        "bool".to_string()
+                                    } else {
+                                        "i128".to_string()
+                                    };
+                                    vars.push((name.clone(), ty));
+                                    implicit_names.insert(name);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
     }
-    vars
+    (vars, implicit_names)
 }
 
 /// Emit shadowing lets at the top of execute/postdecode so the body can use bare names.
@@ -191,7 +226,8 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
             .collect();
 
         // Collect variables declared in __decode (e.g. `integer d = UInt(Rd)`)
-        let decode_vars = collect_decode_vars(&enc.decode);
+        // Also collect implicitly-declared vars (bare assignment, e.g. `m = UInt(Rm)`)
+        let (decode_vars, implicit_names) = collect_decode_vars(&enc.decode);
 
         if first_enc_name_safe.is_none() {
             first_enc_name_safe = Some(enc_name_safe.clone());
@@ -261,6 +297,8 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
 
         // Decode block statements (declare and compute the decode vars).
         // UNDEFINED here means the instruction doesn't exist → return None.
+        // Register implicit var names so generate_stmt_in_decode emits `let mut` for them.
+        set_implicit_decode_vars(implicit_names);
         if let Some(block) = &enc.decode {
             for stmt in block.stmt_all() {
                 let deferred = generate_stmt_in_decode(emitter, &stmt);
@@ -269,6 +307,7 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
                 }
             }
         }
+        set_implicit_decode_vars(HashSet::new());
 
         // Return struct populated with raw fields + decode-computed vars
         let all_names: Vec<String> = fields
