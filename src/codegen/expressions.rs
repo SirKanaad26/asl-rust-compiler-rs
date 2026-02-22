@@ -104,7 +104,9 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
             let obj = generate_expr(&ctx.expr().unwrap());
             let field = ctx.id().unwrap().get_text();
             if obj == "PSTATE" {
-                format!("cpu.{}", field)
+                // PSTATE boolean flags (N/Z/C/V/T/...) are stored as `bool` in CpuState.
+                // Cast to i128 so comparisons with bit literals ('0'/'1' → 0b0/0b1) typecheck.
+                format!("(cpu.{} as i128)", field)
             } else {
                 format!("{}.{}", obj, field)
             }
