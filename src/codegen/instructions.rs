@@ -24,139 +24,17 @@ use crate::parser::aslparser::{
     LValVarRefContextAttrs,
 };
 
-/// Emit stub implementations of common ASL built-in functions so the generated
-/// file compiles without an external runtime crate.  These are approximations —
-/// callers should replace them with correct implementations as needed.
+/// Emit the crate-root header for a generated instructions file.
+/// The full runtime (stubs, CpuState, register accessors) lives in
+/// `src/runtime/runtime.rs` and is copied to the output directory as
+/// `runtime.rs` by the caller in `main.rs`.
 pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
-    // Nightly features required for BitVec<N> const-generic slice/concat.
     emitter.emit("#![feature(generic_const_exprs)]");
     emitter.emit("#![allow(incomplete_features, non_snake_case, dead_code, unused_variables, unused_mut, unused_imports)]");
     emitter.emit("mod bitvec;");
-    emitter.emit("use bitvec::BitVec;");
-    emitter.emit("use bitvec::AslValue;");
-    emitter.emit("");
-    emitter.emit("// ── ASL built-in runtime stubs ──────────────────────────────────────────────");
-    for (sig, body) in &[
-        // Numeric conversion stubs — accept any AslValue so u64, i128, and
-        // BitVec<N> all flow through without explicit casts in generated code.
-        ("fn UInt(x: impl AslValue) -> i128",              "x.to_u128() as i128"),
-        ("fn SInt(x: impl AslValue) -> i128",              "{ let w = x.asl_bit_width(); let v = x.to_u128(); if w == 0 || (v >> (w - 1)) & 1 == 0 { v as i128 } else { (v | !((1u128 << w).wrapping_sub(1))) as i128 } }"),
-        ("fn IsZero(x: impl AslValue) -> bool",            "x.to_u128() == 0"),
-        ("fn IsOnes(x: impl AslValue) -> bool",            "x.to_u64() == u64::MAX"),
-        ("fn Zeros(_n: impl AslValue) -> i128",            "0"),
-        ("fn Ones(n: impl AslValue) -> i128",              "{ let n = n.to_u64(); if n >= 64 { u64::MAX as i128 } else { ((1u64 << n) - 1) as i128 } }"),
-        ("fn ZeroExtend(x: impl AslValue, _n: impl AslValue) -> i128", "x.to_u128() as i128"),
-        ("fn HaveFP16Ext() -> bool",                       "false"),
-        ("fn HaveBF16Ext() -> bool",                       "false"),
-        ("fn HaveSVE() -> bool",                           "false"),
-        ("fn HaveSVE2() -> bool",                          "false"),
-        ("fn HaveMTE() -> bool",                           "false"),
-        ("fn asl_mod(a: i128, b: i128) -> i128",           "((a % b) + b) % b"),
-    ] {
-        emitter.emit(&format!("pub {} {{ {} }}", sig, body));
-    }
-    emitter.emit("");
-
-    // CPU state struct
-    emitter.emit("// ── CPU state ───────────────────────────────────────────────────────────────");
-    emitter.emit("pub struct CpuState {");
-    emitter.indent();
-    emitter.emit("pub X: [u64; 32],");   // AArch64 64-bit GPRs
-    emitter.emit("pub R: [u64; 16],");   // AArch32 32-bit GPRs
-    emitter.emit("pub S: [u64; 32],");   // VFP single-precision
-    emitter.emit("pub VD: [u64; 32],");  // VFP double-precision (D renamed to avoid clash with PSTATE.D)
-    emitter.emit("pub SP: u64,");
-    emitter.emit("pub PC: u64,");
-    // PSTATE flags
-    emitter.emit("pub N: bool,");
-    emitter.emit("pub Z: bool,");
-    emitter.emit("pub C: bool,");
-    emitter.emit("pub V: bool,");
-    emitter.emit("pub EL: u8,");
-    emitter.emit("pub M: u8,");
-    emitter.emit("pub T: bool,");
-    emitter.emit("pub nRW: bool,");
-    emitter.emit("pub SS: bool,");
-    emitter.emit("pub IL: bool,");
-    emitter.emit("pub D: bool,");
-    emitter.emit("pub A: bool,");
-    emitter.emit("pub I: bool,");
-    emitter.emit("pub F: bool,");
-    emitter.dedent();
-    emitter.emit("}");
-    emitter.emit("impl CpuState {");
-    emitter.indent();
-    emitter.emit("pub fn new() -> Self {");
-    emitter.indent();
-    emitter.emit("CpuState { X: [0u64; 32], R: [0u64; 16], S: [0u64; 32], VD: [0u64; 32], SP: 0, PC: 0,");
-    emitter.emit("    N: false, Z: false, C: false, V: false,");
-    emitter.emit("    EL: 0, M: 0, T: false, nRW: false,");
-    emitter.emit("    SS: false, IL: false, D: false, A: false, I: false, F: false }");
-    emitter.dedent();
-    emitter.emit("}");
-    emitter.dedent();
-    emitter.emit("}");
-    for (sig, body) in &[
-        // Register accessors: index and value both accept any AslValue so
-        // integer (i128) decode vars and BitVec<N> fields flow without casts.
-        // Read accessors return i128 (ASL integer) rather than u64 so the
-        // result can be stored directly in integer or bits(N) decoded vars.
-        ("fn Xreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.X[n.to_u64() as usize] as i128"),
-        ("fn Wreg(cpu: &CpuState, n: impl AslValue) -> i128",              "(cpu.X[n.to_u64() as usize] & 0xFFFF_FFFF) as i128"),
-        ("fn set_Xreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.X[n.to_u64() as usize] = val.to_u64()"),
-        ("fn set_Wreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.X[n.to_u64() as usize] = val.to_u64() & 0xFFFF_FFFF"),
-        ("fn Rreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.R[n.to_u64() as usize] as i128"),
-        ("fn set_Rreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.R[n.to_u64() as usize] = val.to_u64() & 0xFFFF_FFFF"),
-        ("fn Sreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.S[n.to_u64() as usize] as i128"),
-        ("fn set_Sreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.S[n.to_u64() as usize] = val.to_u64()"),
-        ("fn Dreg(cpu: &CpuState, n: impl AslValue) -> i128",              "cpu.VD[n.to_u64() as usize] as i128"),
-        ("fn set_Dreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)", "cpu.VD[n.to_u64() as usize] = val.to_u64()"),
-        ("fn check_condition(cpu: &CpuState) -> bool",
-         "true /* TODO: evaluate CPSR/PSTATE condition codes against N/Z/C/V */"),
-    ] {
-        emitter.emit(&format!("pub {} {{ {} }}", sig, body));
-    }
-    emitter.emit("");
-
-    // Branch type constants (ASL enum BranchType → named i128 constants).
-    // Generated call sites use these as bare names (dotted `BranchType.INDIR` → `BranchType_INDIR`).
-    emitter.emit("// ── Branch type constants ───────────────────────────────────────────────────");
-    for (name, val) in &[
-        ("BranchType_INDIR",    0i32),
-        ("BranchType_DIR",      1),
-        ("BranchType_DIRCALL",  2),
-        ("BranchType_INDIRCALL",3),
-        ("BranchType_ERET",     4),
-        ("BranchType_DBGEXIT",  5),
-    ] {
-        emitter.emit(&format!("pub const {}: i128 = {};", name, val));
-    }
-    emitter.emit("");
-
-    // High-level ARM operation stubs.
-    // These would normally update CpuState but call sites in generated execute bodies
-    // don't pass `cpu` (generated as standalone calls).  Stubs are no-ops so the file
-    // compiles; real implementations can be wired in when register access (Step D) lands.
-    emitter.emit("// ── ARM operation stubs ─────────────────────────────────────────────────────");
-    for (sig, body) in &[
-        // PC-write stubs (branch instructions)
-        ("fn BXWritePC(_addr: impl AslValue, _btype: i128)",     "/* TODO: cpu.PC = addr */"),
-        ("fn ALUWritePC(_result: impl AslValue)",                "/* TODO: cpu.PC = result */"),
-        ("fn BranchWritePC(_addr: impl AslValue)",               "/* TODO: cpu.PC = addr */"),
-        ("fn BranchTo(_addr: impl AslValue, _btype: i128)",      "/* TODO: cpu.PC = addr */"),
-        ("fn LoadWritePC(_addr: impl AslValue)",                  "/* TODO: cpu.PC = addr */"),
-        // PSR access stubs (MRS / MSR instructions)
-        ("fn get_SPSR(_cpu: &CpuState) -> i128",                 "0 /* TODO: return SPSR value */"),
-        ("fn GetPSRFromPSTATE() -> i128",                        "0 /* TODO: pack PSTATE fields into PSR */"),
-        ("fn SPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue)", "/* TODO: write SPSR */"),
-        ("fn CPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue)", "/* TODO: write CPSR/PSTATE */"),
-        // Enabled / validity checks (decode guards)
-        ("fn CheckVFPEnabled(_exc_on_failure: impl AslValue)",   "/* TODO: check VFP enabled */"),
-        ("fn CheckAdvSIMDOrFPEnabled(_exc: impl AslValue)",       "/* TODO */"),
-        ("fn AArch64_BranchTo(_addr: impl AslValue, _btype: i128)", "/* TODO: cpu.PC = addr */"),
-    ] {
-        emitter.emit(&format!("pub {} {{ {} }}", sig, body));
-    }
+    emitter.emit("mod runtime;");
+    emitter.emit("use bitvec::{BitVec, AslValue};");
+    emitter.emit("use runtime::*;");
     emitter.emit("");
 }
 

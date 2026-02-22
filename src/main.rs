@@ -6,6 +6,10 @@ use std::{collections::HashSet, env, fs, path::Path};
 /// The bitvec runtime library source, embedded at compile time.
 /// Written to the output directory alongside any generated instructions file.
 const BITVEC_RS: &str = include_str!("runtime/bitvec.rs");
+
+/// The ASL runtime (stubs, CpuState, register accessors), embedded at compile time.
+/// Written to the output directory alongside any generated instructions file.
+const RUNTIME_RS: &str = include_str!("runtime/runtime.rs");
 use antlr_rust::common_token_stream::CommonTokenStream;
 use antlr_rust::InputStream;
 
@@ -129,16 +133,18 @@ fn main() {
 
     println!("Generated: {}", output_file);
 
-    // In instructions mode the generated file references `mod bitvec`, so write
-    // bitvec.rs into the same directory as the output file.
+    // In instructions mode the generated file references `mod bitvec` and `mod runtime`,
+    // so write both alongside the output file.
     if mode == "instructions" {
-        let bitvec_path = Path::new(output_file)
-            .parent()
-            .unwrap_or(Path::new("."))
-            .join("bitvec.rs");
+        let out_dir = Path::new(output_file).parent().unwrap_or(Path::new("."));
+        let bitvec_path = out_dir.join("bitvec.rs");
         fs::write(&bitvec_path, BITVEC_RS)
             .expect("Failed to write bitvec.rs");
         println!("Generated: {}", bitvec_path.display());
+        let runtime_path = out_dir.join("runtime.rs");
+        fs::write(&runtime_path, RUNTIME_RS)
+            .expect("Failed to write runtime.rs");
+        println!("Generated: {}", runtime_path.display());
     }
 }
 

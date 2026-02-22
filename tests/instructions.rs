@@ -4,16 +4,14 @@ use common::run_compiler;
 #[test]
 fn instruction_runtime_stubs() {
     let out = run_compiler("instructions", "examples/instruction_execute.asl");
-    // BV-6: stubs now accept impl AslValue so BitVec<N>, u64, and i128 all flow
-    assert!(out.contains("pub fn UInt(x: impl AslValue) -> i128"), "expected UInt stub:\n{out}");
-    assert!(out.contains("use bitvec::AslValue"), "expected AslValue import:\n{out}");
-    assert!(out.contains("pub fn HaveFP16Ext() -> bool"), "expected HaveFP16Ext stub:\n{out}");
+    // Runtime is now in a separate module — check for module declaration and import
+    assert!(out.contains("mod runtime;"), "expected mod runtime:\n{out}");
+    assert!(out.contains("use runtime::*;"), "expected use runtime::*:\n{out}");
+    assert!(out.contains("use bitvec::{BitVec, AslValue}"), "expected bitvec import:\n{out}");
     assert!(out.contains("non_snake_case") && out.contains("#![allow("), "expected allow attr:\n{out}");
-    assert!(out.contains("pub struct CpuState"), "expected CpuState struct:\n{out}");
-    assert!(out.contains("pub X: [u64; 32]"), "expected CpuState GP registers:\n{out}");
-    // Register read accessors now return i128 (ASL integer) to avoid casts at call sites
-    assert!(out.contains("pub fn Xreg(cpu: &CpuState, n: impl AslValue) -> i128"), "expected Xreg stub:\n{out}");
-    assert!(out.contains("pub fn set_Xreg(cpu: &mut CpuState, n: impl AslValue, val: impl AslValue)"), "expected set_Xreg stub:\n{out}");
+    // Inline stub definitions must NOT appear in the generated file (they live in runtime.rs)
+    assert!(!out.contains("pub fn UInt(x: impl AslValue)"), "UInt stub should be in runtime.rs, not inlined:\n{out}");
+    assert!(!out.contains("pub struct CpuState"), "CpuState should be in runtime.rs, not inlined:\n{out}");
 }
 
 #[test]
@@ -57,9 +55,9 @@ fn instruction_implicit_decl() {
 #[test]
 fn instruction_conditional() {
     let out = run_compiler("instructions", "examples/instruction_conditional.asl");
-    // check_condition stub must be emitted after CpuState
-    assert!(out.contains("pub fn check_condition(cpu: &CpuState) -> bool"), "expected check_condition stub:\n{out}");
-    // execute body must be wrapped
+    // check_condition lives in runtime.rs now — generated file uses it via `use runtime::*`
+    assert!(out.contains("use runtime::*;"), "expected use runtime::*:\n{out}");
+    // execute body must still be wrapped with check_condition
     assert!(out.contains("if check_condition(cpu) {"), "expected conditional wrapper in execute:\n{out}");
 }
 
@@ -78,7 +76,7 @@ fn instruction_simple() {
 fn bv6_coercions() {
     let out = run_compiler("instructions", "examples/bv6_coercions.asl");
     // AslValue trait imported so stubs and generated code can use it
-    assert!(out.contains("use bitvec::AslValue"), "expected AslValue import:\n{out}");
+    assert!(out.contains("use bitvec::{BitVec, AslValue}"), "expected AslValue import:\n{out}");
     // bits(64) decode var wrapped with BitVec::from_asl — NOT a direct cast
     assert!(out.contains("BitVec::from_asl(Xreg(cpu, n))"), "expected from_asl coercion for Xreg read:\n{out}");
     // set_Xreg called with BitVec<64> value (impl AslValue accepts it)
