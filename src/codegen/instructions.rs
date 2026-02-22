@@ -119,6 +119,48 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
     }
     emitter.emit("");
+
+    // Branch type constants (ASL enum BranchType → named i128 constants).
+    // Generated call sites use these as bare names (dotted `BranchType.INDIR` → `BranchType_INDIR`).
+    emitter.emit("// ── Branch type constants ───────────────────────────────────────────────────");
+    for (name, val) in &[
+        ("BranchType_INDIR",    0i32),
+        ("BranchType_DIR",      1),
+        ("BranchType_DIRCALL",  2),
+        ("BranchType_INDIRCALL",3),
+        ("BranchType_ERET",     4),
+        ("BranchType_DBGEXIT",  5),
+    ] {
+        emitter.emit(&format!("#[allow(non_upper_case_globals, dead_code)]"));
+        emitter.emit(&format!("pub const {}: i128 = {};", name, val));
+    }
+    emitter.emit("");
+
+    // High-level ARM operation stubs.
+    // These would normally update CpuState but call sites in generated execute bodies
+    // don't pass `cpu` (generated as standalone calls).  Stubs are no-ops so the file
+    // compiles; real implementations can be wired in when register access (Step D) lands.
+    emitter.emit("// ── ARM operation stubs ─────────────────────────────────────────────────────");
+    for (sig, body) in &[
+        // PC-write stubs (branch instructions)
+        ("fn BXWritePC(_addr: impl AslValue, _btype: i128)",     "/* TODO: cpu.PC = addr */"),
+        ("fn ALUWritePC(_result: impl AslValue)",                "/* TODO: cpu.PC = result */"),
+        ("fn BranchWritePC(_addr: impl AslValue)",               "/* TODO: cpu.PC = addr */"),
+        ("fn BranchTo(_addr: impl AslValue, _btype: i128)",      "/* TODO: cpu.PC = addr */"),
+        ("fn LoadWritePC(_addr: impl AslValue)",                  "/* TODO: cpu.PC = addr */"),
+        // PSR access stubs (MRS / MSR instructions)
+        ("fn GetPSRFromPSTATE() -> i128",                        "0 /* TODO: pack PSTATE fields into PSR */"),
+        ("fn SPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue)", "/* TODO: write SPSR */"),
+        ("fn CPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue)", "/* TODO: write CPSR/PSTATE */"),
+        // Enabled / validity checks (decode guards)
+        ("fn CheckVFPEnabled(_exc_on_failure: impl AslValue)",   "/* TODO: check VFP enabled */"),
+        ("fn CheckAdvSIMDOrFPEnabled(_exc: impl AslValue)",       "/* TODO */"),
+        ("fn AArch64_BranchTo(_addr: impl AslValue, _btype: i128)", "/* TODO: cpu.PC = addr */"),
+    ] {
+        emitter.emit("#[allow(non_snake_case, dead_code)]");
+        emitter.emit(&format!("pub {} {{ {} }}", sig, body));
+    }
+    emitter.emit("");
 }
 
 /// Scan a decode block for top-level variable declarations, returning:
