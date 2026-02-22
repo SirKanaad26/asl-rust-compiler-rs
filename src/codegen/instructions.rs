@@ -53,7 +53,6 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn HaveMTE() -> bool",                           "false"),
         ("fn asl_mod(a: i128, b: i128) -> i128",           "((a % b) + b) % b"),
     ] {
-        emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
     }
     emitter.emit("");
@@ -115,7 +114,6 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn check_condition(cpu: &CpuState) -> bool",
          "true /* TODO: evaluate CPSR/PSTATE condition codes against N/Z/C/V */"),
     ] {
-        emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
     }
     emitter.emit("");
@@ -131,7 +129,6 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("BranchType_ERET",     4),
         ("BranchType_DBGEXIT",  5),
     ] {
-        emitter.emit(&format!("#[allow(non_upper_case_globals, dead_code)]"));
         emitter.emit(&format!("pub const {}: i128 = {};", name, val));
     }
     emitter.emit("");
@@ -149,6 +146,7 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn BranchTo(_addr: impl AslValue, _btype: i128)",      "/* TODO: cpu.PC = addr */"),
         ("fn LoadWritePC(_addr: impl AslValue)",                  "/* TODO: cpu.PC = addr */"),
         // PSR access stubs (MRS / MSR instructions)
+        ("fn get_SPSR(_cpu: &CpuState) -> i128",                 "0 /* TODO: return SPSR value */"),
         ("fn GetPSRFromPSTATE() -> i128",                        "0 /* TODO: pack PSTATE fields into PSR */"),
         ("fn SPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue)", "/* TODO: write SPSR */"),
         ("fn CPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue)", "/* TODO: write CPSR/PSTATE */"),
@@ -157,7 +155,6 @@ pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
         ("fn CheckAdvSIMDOrFPEnabled(_exc: impl AslValue)",       "/* TODO */"),
         ("fn AArch64_BranchTo(_addr: impl AslValue, _btype: i128)", "/* TODO: cpu.PC = addr */"),
     ] {
-        emitter.emit("#[allow(non_snake_case, dead_code)]");
         emitter.emit(&format!("pub {} {{ {} }}", sig, body));
     }
     emitter.emit("");

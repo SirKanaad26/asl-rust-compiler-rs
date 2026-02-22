@@ -76,6 +76,13 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
                 .iter()
                 .map(|s| generate_slice(s))
                 .collect();
+            // Parameterless getter call: SPSR[], CPSR[], etc.
+            if slices.is_empty() {
+                return match obj.as_str() {
+                    "SPSR" => format!("get_SPSR(cpu)"),
+                    _ => format!("todo!(/* getter call: {}[] */)", obj),
+                };
+            }
             // Map register array reads to CpuState accessor calls.
             // In ASL, X[n]/W[n] are always register accesses, not plain arrays.
             if slices.len() == 1 {
