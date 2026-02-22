@@ -347,12 +347,12 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
                 }
             } else {
                 // In __decode blocks, an assignment to a bare name that was collected as
-                // an implicit decode var needs `let mut` (no explicit type annotation in ASL source).
+                // an implicit decode var needs `let` (no explicit type annotation in ASL source).
                 if in_decode_ctx() {
                     if let LValExprContextAll::LValVarRefContext(lref) = lval.as_ref() {
                         let var_name = lref.qualId().unwrap().get_text();
                         if is_implicit_decode_var(&var_name) {
-                            emitter.emit(&format!("let mut {} = {};", var_name, rhs));
+                            emitter.emit(&format!("let {} = {};", var_name, rhs));
                             return;
                         }
                     }

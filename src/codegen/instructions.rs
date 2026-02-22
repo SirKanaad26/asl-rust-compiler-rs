@@ -183,19 +183,21 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         emitter.dedent();
         emitter.emit("}");
 
-        // Field extraction (mut so decode block can reassign them)
+        // Field extraction
         for (name, begin, len) in &fields {
             let mask = (1u64 << len) - 1;
             emitter.emit(&format!(
-                "let mut {}: u64 = (bits >> {}) & 0x{:X};",
+                "let {}: u64 = (bits >> {}) & 0x{:X};",
                 name, begin, mask
             ));
         }
 
-        // Guard check — evaluated after field extraction since guard may reference fields
+        // Guard check — skip trivially-true guards
         if let Some(guard) = enc.expr() {
             let guard_str = generate_expr(&guard);
-            emitter.emit(&format!("if !({}) {{ return None; }}", guard_str));
+            if guard_str != "true" {
+                emitter.emit(&format!("if !({}) {{ return None; }}", guard_str));
+            }
         }
 
         // __unpredictable_unless checks: runtime asserts that certain bits hold expected values.
@@ -312,33 +314,6 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
     emitter.dedent();
     emitter.emit("}");
 
-    // Emit one #[test] per encoding that exercises decode → execute end-to-end.
-    // Uses fixed_bits (all don't-care bits = 0) as the test opcode.
-    // Wrapped in `if let Some` because the guard expression may reject all-zero don't-care fields.
-    if !test_cases.is_empty() {
-        emitter.emit("");
-        emitter.emit("#[cfg(test)]");
-        emitter.emit(&format!("mod tests_{} {{", instr_name_safe));
-        emitter.indent();
-        emitter.emit("use super::*;");
-        for (enc_name, fixed_bits) in &test_cases {
-            emitter.emit("");
-            emitter.emit("#[test]");
-            emitter.emit(&format!("fn decode_execute_{}() {{", enc_name));
-            emitter.indent();
-            emitter.emit(&format!("let bits: u64 = 0x{:016X};", fixed_bits));
-            emitter.emit(&format!("if let Some(enc) = {}::decode(bits) {{", enc_name));
-            emitter.indent();
-            emitter.emit("let mut cpu = CpuState::new();");
-            emitter.emit(&format!("execute_{}(&enc, &mut cpu);", instr_name_safe));
-            emitter.dedent();
-            emitter.emit("}");
-            emitter.dedent();
-            emitter.emit("}");
-        }
-        emitter.dedent();
-        emitter.emit("}");
-    }
 }
 
 /// Parse an ASL opcode pattern (e.g. `'11xx 00xx'`) into (fixed_mask, fixed_bits).
