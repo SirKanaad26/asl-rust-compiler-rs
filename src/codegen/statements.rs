@@ -7,7 +7,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::codegen::emitter::CodeEmitter;
-use crate::codegen::expressions::{generate_expr, generate_lval};
+use crate::codegen::expressions::{generate_expr, generate_lval, CPU_MUT_FNS, CPU_REF_FNS};
 use crate::codegen::types::map_type;
 use crate::parser::aslparser::*;
 
@@ -428,14 +428,23 @@ fn generate_inline_stmt(emitter: &mut CodeEmitter, stmt: &Rc<InlineStmtContextAl
             emitter.emit("}");
         }
         InlineStmtContextAll::StmtCallContext(ctx) => {
-            // Procedure call as a statement: `CheckVFPEnabled(TRUE);`
+            // Procedure call as a statement: `BXWritePC(addr, btype);`
             let name = ctx.qualId().unwrap().get_text().replace('.', "_");
             let args: Vec<String> = ctx.exprCommaList0().unwrap()
                 .expr_all()
                 .iter()
                 .map(|e| generate_expr(e))
                 .collect();
-            emitter.emit(&format!("{}({});", name, args.join(", ")));
+            let call = if CPU_MUT_FNS.contains(&name.as_str()) || CPU_REF_FNS.contains(&name.as_str()) {
+                if args.is_empty() {
+                    format!("{}(cpu)", name)
+                } else {
+                    format!("{}(cpu, {})", name, args.join(", "))
+                }
+            } else {
+                format!("{}({})", name, args.join(", "))
+            };
+            emitter.emit(&format!("{};", call));
         }
         InlineStmtContextAll::StmtDefEnumContext(ctx) => {
             let name = ctx.id().unwrap().get_text();

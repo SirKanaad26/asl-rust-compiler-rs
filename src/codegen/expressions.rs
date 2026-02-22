@@ -4,6 +4,18 @@ use antlr_rust::token::Token;
 
 use crate::parser::aslparser::*;
 
+/// Functions that mutate CPU state: compiler injects `cpu` as first argument.
+pub const CPU_MUT_FNS: &[&str] = &[
+    "BXWritePC", "ALUWritePC", "BranchWritePC", "BranchTo",
+    "LoadWritePC", "SPSRWriteByInstr", "CPSRWriteByInstr",
+    "AArch64_BranchTo", "CheckVFPEnabled", "CheckAdvSIMDOrFPEnabled",
+];
+
+/// Functions that read CPU state: compiler injects `cpu` as first argument.
+pub const CPU_REF_FNS: &[&str] = &[
+    "GetPSRFromPSTATE",
+];
+
 /// Generate a Rust expression string from an ASL expr node
 pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
     match expr.as_ref() {
@@ -67,7 +79,15 @@ pub fn generate_expr(expr: &Rc<ExprContextAll<'_>>) -> String {
                 .iter()
                 .map(|e| generate_expr(e))
                 .collect();
-            format!("{}({})", name, args.join(", "))
+            if CPU_MUT_FNS.contains(&name.as_str()) || CPU_REF_FNS.contains(&name.as_str()) {
+                if args.is_empty() {
+                    format!("{}(cpu)", name)
+                } else {
+                    format!("{}(cpu, {})", name, args.join(", "))
+                }
+            } else {
+                format!("{}({})", name, args.join(", "))
+            }
         }
         ExprContextAll::ExprIndexContext(ctx) => {
             let obj = generate_expr(&ctx.expr().unwrap());

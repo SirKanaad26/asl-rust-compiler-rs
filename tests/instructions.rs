@@ -12,6 +12,8 @@ fn instruction_runtime_stubs() {
     // Inline stub definitions must NOT appear in the generated file (they live in runtime.rs)
     assert!(!out.contains("pub fn UInt(x: impl AslValue)"), "UInt stub should be in runtime.rs, not inlined:\n{out}");
     assert!(!out.contains("pub struct CpuState"), "CpuState should be in runtime.rs, not inlined:\n{out}");
+    // cpu-threading: helper functions must take cpu — old no-op stubs must not appear
+    assert!(!out.contains("fn BXWritePC(_addr"), "BXWritePC stub should take cpu as first arg:\n{out}");
 }
 
 #[test]

@@ -58,6 +58,8 @@ pub struct CpuState {
     pub A: bool,
     pub I: bool,
     pub F: bool,
+    // Saved Program Status Register (AArch32)
+    pub SPSR: u32,
 }
 
 impl CpuState {
@@ -68,6 +70,7 @@ impl CpuState {
             N: false, Z: false, C: false, V: false,
             EL: 0, M: 0, T: false, nRW: false,
             SS: false, IL: false, D: false, A: false, I: false, F: false,
+            SPSR: 0,
         }
     }
 }
@@ -96,22 +99,91 @@ pub const BranchType_INDIRCALL: i128 = 3;
 pub const BranchType_ERET: i128 = 4;
 pub const BranchType_DBGEXIT: i128 = 5;
 
-// ── ARM operation stubs ──────────────────────────────────────────────────────
+// ── ARM operation implementations ────────────────────────────────────────────
 
-// PC-write stubs (branch instructions)
-pub fn BXWritePC(_addr: impl AslValue, _btype: i128) { /* TODO: cpu.PC = addr */ }
-pub fn ALUWritePC(_result: impl AslValue) { /* TODO: cpu.PC = result */ }
-pub fn BranchWritePC(_addr: impl AslValue) { /* TODO: cpu.PC = addr */ }
-pub fn BranchTo(_addr: impl AslValue, _btype: i128) { /* TODO: cpu.PC = addr */ }
-pub fn LoadWritePC(_addr: impl AslValue) { /* TODO: cpu.PC = addr */ }
+/// Pack PSTATE (cpu.*) fields into a 32-bit PSR word.
+pub fn GetPSRFromPSTATE(cpu: &CpuState) -> i128 {
+    let mut psr: u32 = 0;
+    if cpu.N  { psr |= 1 << 31; }
+    if cpu.Z  { psr |= 1 << 30; }
+    if cpu.C  { psr |= 1 << 29; }
+    if cpu.V  { psr |= 1 << 28; }
+    psr |= (cpu.M as u32) & 0x1F;  // mode bits [4:0]
+    if cpu.T  { psr |= 1 << 5; }
+    if cpu.F  { psr |= 1 << 6; }
+    if cpu.I  { psr |= 1 << 7; }
+    if cpu.A  { psr |= 1 << 8; }
+    if cpu.D  { psr |= 1 << 9; }
+    psr |= (cpu.IL as u32) << 20;
+    psr |= (cpu.SS as u32) << 21;
+    psr as i128
+}
 
-// PSR access stubs (MRS / MSR instructions)
-pub fn get_SPSR(_cpu: &CpuState) -> i128 { 0 /* TODO: return SPSR value */ }
-pub fn GetPSRFromPSTATE() -> i128 { 0 /* TODO: pack PSTATE fields into PSR */ }
-pub fn SPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue) { /* TODO: write SPSR */ }
-pub fn CPSRWriteByInstr(_val: impl AslValue, _mask: impl AslValue) { /* TODO: write CPSR/PSTATE */ }
+/// Read SPSR (Saved Program Status Register).
+pub fn get_SPSR(cpu: &CpuState) -> i128 { cpu.SPSR as i128 }
+
+/// Write selected byte lanes of SPSR from `val` using `mask` as byte-lane enables.
+pub fn SPSRWriteByInstr(cpu: &mut CpuState, val: impl AslValue, mask: impl AslValue) {
+    let v = val.to_u64() as u32;
+    let m = mask.to_u64() as u32;
+    let byte_mask =
+        (if m & 1 != 0 { 0x000000FFu32 } else { 0 }) |
+        (if m & 2 != 0 { 0x0000FF00u32 } else { 0 }) |
+        (if m & 4 != 0 { 0x00FF0000u32 } else { 0 }) |
+        (if m & 8 != 0 { 0xFF000000u32 } else { 0 });
+    cpu.SPSR = (cpu.SPSR & !byte_mask) | (v & byte_mask);
+}
+
+/// Write selected byte lanes of CPSR from `val` and unpack back into cpu.* fields.
+pub fn CPSRWriteByInstr(cpu: &mut CpuState, val: impl AslValue, mask: impl AslValue) {
+    let v = val.to_u64() as u32;
+    let m = mask.to_u64() as u32;
+    let byte_mask =
+        (if m & 1 != 0 { 0x000000FFu32 } else { 0 }) |
+        (if m & 2 != 0 { 0x0000FF00u32 } else { 0 }) |
+        (if m & 4 != 0 { 0x00FF0000u32 } else { 0 }) |
+        (if m & 8 != 0 { 0xFF000000u32 } else { 0 });
+    let new_psr = (GetPSRFromPSTATE(cpu) as u32 & !byte_mask) | (v & byte_mask);
+    cpu.N   = (new_psr >> 31) & 1 == 1;
+    cpu.Z   = (new_psr >> 30) & 1 == 1;
+    cpu.C   = (new_psr >> 29) & 1 == 1;
+    cpu.V   = (new_psr >> 28) & 1 == 1;
+    cpu.T   = (new_psr >>  5) & 1 == 1;
+    cpu.F   = (new_psr >>  6) & 1 == 1;
+    cpu.I   = (new_psr >>  7) & 1 == 1;
+    cpu.A   = (new_psr >>  8) & 1 == 1;
+    cpu.M   =  (new_psr & 0x1F) as u8;
+}
+
+// PC-write helpers (branch instructions)
+
+/// BX-style write: bit 0 selects Thumb mode, then stripped from address.
+pub fn BXWritePC(cpu: &mut CpuState, addr: impl AslValue, _btype: i128) {
+    let a = addr.to_u64();
+    cpu.T  = (a & 1) == 1;
+    cpu.PC = a & !1u64;
+}
+
+pub fn ALUWritePC(cpu: &mut CpuState, result: impl AslValue) {
+    BXWritePC(cpu, result, BranchType_DIR);
+}
+
+pub fn BranchWritePC(cpu: &mut CpuState, addr: impl AslValue) {
+    cpu.PC = addr.to_u64() & !3u64;  // word-align for AArch32
+}
+
+pub fn BranchTo(cpu: &mut CpuState, addr: impl AslValue, _btype: i128) {
+    cpu.PC = addr.to_u64();
+}
+
+pub fn LoadWritePC(cpu: &mut CpuState, addr: impl AslValue) {
+    BXWritePC(cpu, addr, BranchType_INDIR);
+}
+
+pub fn AArch64_BranchTo(cpu: &mut CpuState, addr: impl AslValue, _btype: i128) {
+    cpu.PC = addr.to_u64();
+}
 
 // Enabled / validity checks (decode guards)
-pub fn CheckVFPEnabled(_exc_on_failure: impl AslValue) { /* TODO: check VFP enabled */ }
-pub fn CheckAdvSIMDOrFPEnabled(_exc: impl AslValue) { /* TODO */ }
-pub fn AArch64_BranchTo(_addr: impl AslValue, _btype: i128) { /* TODO: cpu.PC = addr */ }
+pub fn CheckVFPEnabled(_cpu: &CpuState, _exc_on_failure: impl AslValue) { /* TODO: check VFP enabled */ }
+pub fn CheckAdvSIMDOrFPEnabled(_cpu: &CpuState, _exc: impl AslValue) { /* TODO */ }
