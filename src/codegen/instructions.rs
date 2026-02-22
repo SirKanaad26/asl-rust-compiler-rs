@@ -5,7 +5,7 @@ use antlr_rust::token::Token;
 
 use crate::codegen::emitter::CodeEmitter;
 use crate::codegen::expressions::generate_expr;
-use crate::codegen::statements::{collect_implicit_decls, generate_stmt, generate_stmt_in_decode, set_implicit_decode_vars};
+use crate::codegen::statements::{collect_implicit_decls, generate_stmt, generate_stmt_in_decode, generate_stmts_with_else_fixup, set_implicit_decode_vars};
 use crate::codegen::types::map_type;
 use crate::parser::aslparser::{
     InstructionContextAll,
@@ -386,11 +386,9 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         for name in collect_implicit_decls(&postdecode_stmts, &shadow_names) {
             emitter.emit(&format!("let mut {} = Default::default();", name));
         }
-        for stmt in postdecode_stmts {
-            let deferred = generate_stmt(emitter, &stmt);
-            for d in deferred {
-                generate_stmt(emitter, &d);
-            }
+        let deferred = generate_stmts_with_else_fixup(emitter, &postdecode_stmts);
+        for d in deferred {
+            generate_stmt(emitter, &d);
         }
         emitter.dedent();
         emitter.emit("}");
@@ -424,11 +422,9 @@ pub fn generate_instruction(emitter: &mut CodeEmitter, instr: &Rc<InstructionCon
         if stmts.is_empty() {
             emitter.emit("// empty execute block");
         } else {
-            for stmt in &stmts {
-                let deferred = generate_stmt(emitter, &stmt);
-                for d in deferred {
-                    generate_stmt(emitter, &d);
-                }
+            let deferred = generate_stmts_with_else_fixup(emitter, &stmts);
+            for d in deferred {
+                generate_stmt(emitter, &d);
             }
         }
     } else {

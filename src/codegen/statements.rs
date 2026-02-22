@@ -123,6 +123,17 @@ pub fn generate_stmt<'a>(
 }
 
 fn generate_if_stmt(emitter: &mut CodeEmitter, ctx: &StmtIfContext<'_>) {
+    generate_if_stmt_core(emitter, ctx, &[]);
+}
+
+/// Core if-stmt emitter.  `explicit_else` is used when the grammar-level else block
+/// is an ANTLR error-recovery node (instructions mode INDENT/DEDENT absorption):
+/// the caller has already pulled the else-body stmts out of the parent block.
+fn generate_if_stmt_core<'a>(
+    emitter: &mut CodeEmitter,
+    ctx: &StmtIfContext<'a>,
+    explicit_else: &[Rc<StmtContextAll<'a>>],
+) {
     let test = generate_expr(&ctx.expr().unwrap());
     emitter.emit(&format!("if {} {{", test));
     emitter.indent();
@@ -141,14 +152,69 @@ fn generate_if_stmt(emitter: &mut CodeEmitter, ctx: &StmtIfContext<'_>) {
         emitter.dedent();
     }
 
-    if let Some(else_block) = ctx.blockOrEmbed1(1) {
+    // Use the grammar-level else block if it parsed successfully; otherwise fall
+    // back to the explicitly-supplied stmts collected by the parent loop.
+    let grammar_else = ctx.blockOrEmbed1(1)
+        .filter(|b| !matches!(b.as_ref(), BlockOrEmbed1ContextAll::Error(_)));
+
+    if let Some(else_block) = grammar_else {
         emitter.emit("} else {");
         emitter.indent();
         generate_block_or_embed1(emitter, &else_block);
         emitter.dedent();
+    } else if !explicit_else.is_empty() {
+        emitter.emit("} else {");
+        emitter.indent();
+        for s in explicit_else {
+            let deferred = generate_stmt(emitter, s);
+            for d in deferred {
+                generate_stmt(emitter, &d);
+            }
+        }
+        emitter.dedent();
     }
 
     emitter.emit("}");
+}
+
+/// Iterate a flat list of stmts, fixing up the case where an `if` stmt's else block
+/// was absorbed into the parent block by the INDENT/DEDENT lexer (instructions mode).
+///
+/// When `blockOrEmbed1(1)` is an Error recovery node, subsequent sibling stmts at a
+/// *deeper* column than the `if` keyword are the else body.  This mirrors the
+/// column-split fix applied to `while`/`for` bodies in `generate_indented_block_split`.
+pub fn generate_stmts_with_else_fixup<'a>(
+    emitter: &mut CodeEmitter,
+    stmts: &[Rc<StmtContextAll<'a>>],
+) -> Vec<Rc<StmtContextAll<'a>>> {
+    let mut i = 0;
+    let mut deferred: Vec<Rc<StmtContextAll<'a>>> = Vec::new();
+
+    while i < stmts.len() {
+        let stmt = &stmts[i];
+
+        if let StmtContextAll::StmtIfContext(ctx) = stmt.as_ref() {
+            let has_error_else = ctx.blockOrEmbed1(1)
+                .map_or(false, |b| matches!(b.as_ref(), BlockOrEmbed1ContextAll::Error(_)));
+            if has_error_else {
+                let if_col = stmt_col(stmt);
+                // Collect subsequent stmts deeper than `if` col — these are the else body.
+                let mut j = i + 1;
+                while j < stmts.len() && stmt_col(&stmts[j]) > if_col {
+                    j += 1;
+                }
+                generate_if_stmt_core(emitter, ctx, &stmts[i + 1..j]);
+                i = j;
+                continue;
+            }
+        }
+
+        for d in generate_stmt(emitter, stmt) {
+            deferred.push(d);
+        }
+        i += 1;
+    }
+    deferred
 }
 
 fn generate_while_stmt<'a>(
@@ -220,11 +286,10 @@ fn generate_block_or_embed1(emitter: &mut CodeEmitter, block: &Rc<BlockOrEmbed1C
         }
         BlockOrEmbed1ContextAll::BlockIndentContext(ctx) => {
             if let Some(indented) = ctx.indentedBlock() {
-                for stmt in indented.stmt_all() {
-                    let deferred = generate_stmt(emitter, &stmt);
-                    for d in deferred {
-                        generate_stmt(emitter, &d);
-                    }
+                let stmts = indented.stmt_all();
+                let deferred = generate_stmts_with_else_fixup(emitter, &stmts);
+                for d in deferred {
+                    generate_stmt(emitter, &d);
                 }
             }
         }
