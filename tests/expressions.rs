@@ -17,7 +17,7 @@ fn expr_array_index() {
 fn expr_bit_slice() {
     let out = run_compiler("definitions", "examples/expr_slice.asl");
     assert!(out.contains("x.slice::<7, 0>()"), "missing range bit slice:\n{out}");
-    assert!(out.contains("x.bit(n as usize)"), "missing single bit slice:\n{out}");
+    assert!(out.contains("asl_bit(x, n as usize)"), "missing single bit slice:\n{out}");
 }
 
 #[test]

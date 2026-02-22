@@ -74,7 +74,10 @@ fn collect_decode_vars(decode: &Option<Rc<IndentedBlockContextAll<'_>>>) -> (Vec
                                     let rhs_text = actx.expr()
                                         .map(|e| e.get_text())
                                         .unwrap_or_default();
-                                    let ty = if rhs_text.contains("==") || rhs_text.contains("!=") {
+                                    let ty = if rhs_text.contains("==") || rhs_text.contains("!=")
+                                        || rhs_text.starts_with('!')
+                                        || rhs_text == "TRUE" || rhs_text == "FALSE"
+                                    {
                                         "bool".to_string()
                                     } else {
                                         "i128".to_string()

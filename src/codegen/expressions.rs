@@ -9,6 +9,7 @@ pub const CPU_MUT_FNS: &[&str] = &[
     "BXWritePC", "ALUWritePC", "BranchWritePC", "BranchTo",
     "LoadWritePC", "SPSRWriteByInstr", "CPSRWriteByInstr",
     "AArch64_BranchTo", "CheckVFPEnabled", "CheckAdvSIMDOrFPEnabled",
+    "ALUExceptionReturn",
 ];
 
 /// Functions that read CPU state: compiler injects `cpu` as first argument.
@@ -333,7 +334,7 @@ fn generate_bit_slice(obj: &str, slice: &Rc<SliceContextAll<'_>>) -> String {
     match slice.as_ref() {
         SliceContextAll::SliceSingleContext(ctx) => {
             let bit = generate_expr(&ctx.expr().unwrap());
-            format!("{}.bit({} as usize)", obj, bit)
+            format!("asl_bit({}, {} as usize)", obj, bit)
         }
         SliceContextAll::SliceRangeContext(ctx) => {
             let hi_text = ctx.begin.as_ref().unwrap().get_text();

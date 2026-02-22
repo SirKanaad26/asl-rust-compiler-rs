@@ -187,3 +187,103 @@ pub fn AArch64_BranchTo(cpu: &mut CpuState, addr: impl AslValue, _btype: i128) {
 // Enabled / validity checks (decode guards)
 pub fn CheckVFPEnabled(_cpu: &CpuState, _exc_on_failure: impl AslValue) { /* TODO: check VFP enabled */ }
 pub fn CheckAdvSIMDOrFPEnabled(_cpu: &CpuState, _exc: impl AslValue) { /* TODO */ }
+
+// ── Shift-type constants (ASL enum SRType) ───────────────────────────────────
+pub const SRType_LSL: i128 = 0;
+pub const SRType_LSR: i128 = 1;
+pub const SRType_ASR: i128 = 2;
+pub const SRType_ROR: i128 = 3;
+pub const SRType_RRX: i128 = 4;
+
+/// Single-bit extraction: asl_bit(x, i) == true iff bit i of x is set.
+/// Used in generated code for `result<31>` etc. (single-bit slice on any AslValue).
+pub fn asl_bit(x: impl AslValue, i: usize) -> bool {
+    (x.to_u128() >> i) & 1 != 0
+}
+
+/// ARM shift-with-carry: returns (shifted_result, carry_out).
+/// Implements ARMv7-M Shift_C pseudocode for all shift types.
+pub fn Shift_C(val: impl AslValue, shift_t: impl AslValue, shift_n: impl AslValue, carry_in: impl AslValue) -> (i128, bool) {
+    let v = val.to_u64() & 0xFFFF_FFFF;
+    let st = shift_t.to_u64() as i128;
+    let sn = shift_n.to_u64() as u32;
+    let cin = carry_in.to_u128() & 1 != 0;
+
+    let (result32, carry_out): (u32, bool) = match st {
+        SRType_LSL => {
+            if sn == 0 { (v as u32, cin) }
+            else if sn < 32 {
+                let carry = (v >> (32 - sn)) & 1 != 0;
+                (((v << sn) & 0xFFFF_FFFF) as u32, carry)
+            } else if sn == 32 {
+                (0u32, v & 1 != 0)
+            } else {
+                (0u32, false)
+            }
+        }
+        SRType_LSR => {
+            if sn == 0 { (v as u32, cin) }
+            else if sn < 32 {
+                let carry = (v >> (sn - 1)) & 1 != 0;
+                ((v >> sn) as u32, carry)
+            } else if sn == 32 {
+                (0u32, v >> 31 != 0)
+            } else {
+                (0u32, false)
+            }
+        }
+        SRType_ASR => {
+            let n = sn.min(32);
+            let sv = v as i32;
+            let carry = (v >> (n - 1)) & 1 != 0;
+            ((sv >> n) as u32, carry)
+        }
+        SRType_ROR => {
+            let n = sn % 32;
+            if n == 0 {
+                let carry = v >> 31 != 0;
+                (v as u32, carry)
+            } else {
+                let result = v.rotate_right(n);
+                let carry = (result >> 31) & 1 != 0;
+                (result as u32, carry)
+            }
+        }
+        SRType_RRX => {
+            let carry = v & 1 != 0;
+            let result = ((cin as u32) << 31) | ((v >> 1) as u32);
+            (result, carry)
+        }
+        _ => (v as u32, cin),
+    };
+    (result32 as i128, carry_out)
+}
+
+/// True iff all bits of x are zero.
+pub fn IsZeroBit(x: impl AslValue) -> bool { x.to_u128() == 0 }
+
+/// Stub: returns false (we never model IT-block state in simulation).
+pub fn InITBlock() -> bool { false }
+
+/// Decode immediate shift field → (SRType, shift_amount).
+/// ARM: LSR/ASR encoding of 0 means shift by 32.
+pub fn DecodeImmShift(stype: impl AslValue, imm: impl AslValue) -> (i128, i128) {
+    let st = stype.to_u64();
+    let n  = imm.to_u64();
+    let (shift_t, shift_n) = match (st, n) {
+        (0b00, _)      => (SRType_LSL, n as i128),
+        (0b01, 0)      => (SRType_LSR, 32i128),
+        (0b01, _)      => (SRType_LSR, n as i128),
+        (0b10, 0)      => (SRType_ASR, 32i128),
+        (0b10, _)      => (SRType_ASR, n as i128),
+        (0b11, 0)      => (SRType_RRX, 1i128),
+        _              => (SRType_ROR, n as i128),
+    };
+    (shift_t, shift_n)
+}
+
+/// ARM exception return via PC (A32 mode only; stub for Thumb simulation).
+pub fn ALUExceptionReturn(cpu: &mut CpuState, _result: impl AslValue) {
+    // TODO: restore CPSR from SPSR, branch to result address
+    let _ = cpu;
+}
