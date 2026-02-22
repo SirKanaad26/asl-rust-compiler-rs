@@ -123,21 +123,29 @@ pub fn generate_stmt<'a>(
 }
 
 fn generate_if_stmt(emitter: &mut CodeEmitter, ctx: &StmtIfContext<'_>) {
-    generate_if_stmt_core(emitter, ctx, &[]);
+    generate_if_stmt_core(emitter, ctx, &[], &[]);
 }
 
-/// Core if-stmt emitter.  `explicit_else` is used when the grammar-level else block
-/// is an ANTLR error-recovery node (instructions mode INDENT/DEDENT absorption):
-/// the caller has already pulled the else-body stmts out of the parent block.
+/// Core if-stmt emitter.
+/// `explicit_then` is used when the grammar-level then-block is an ANTLR error-recovery
+/// node (instructions mode INDENT/DEDENT absorption): the caller has already pulled the
+/// then-body stmts out of the parent block.
+/// `explicit_else` is used similarly for the else block.
 fn generate_if_stmt_core<'a>(
     emitter: &mut CodeEmitter,
     ctx: &StmtIfContext<'a>,
+    explicit_then: &[Rc<StmtContextAll<'a>>],
     explicit_else: &[Rc<StmtContextAll<'a>>],
 ) {
     let test = generate_expr(&ctx.expr().unwrap());
     emitter.emit(&format!("if {} {{", test));
     emitter.indent();
-    if let Some(then_block) = ctx.blockOrEmbed1(0) {
+    if !explicit_then.is_empty() {
+        let deferred = generate_stmts_with_else_fixup(emitter, explicit_then);
+        for d in deferred {
+            generate_stmt(emitter, &d);
+        }
+    } else if let Some(then_block) = ctx.blockOrEmbed1(0) {
         generate_block_or_embed1(emitter, &then_block);
     }
     emitter.dedent();
@@ -165,11 +173,9 @@ fn generate_if_stmt_core<'a>(
     } else if !explicit_else.is_empty() {
         emitter.emit("} else {");
         emitter.indent();
-        for s in explicit_else {
-            let deferred = generate_stmt(emitter, s);
-            for d in deferred {
-                generate_stmt(emitter, &d);
-            }
+        let deferred = generate_stmts_with_else_fixup(emitter, explicit_else);
+        for d in deferred {
+            generate_stmt(emitter, &d);
         }
         emitter.dedent();
     }
@@ -194,16 +200,26 @@ pub fn generate_stmts_with_else_fixup<'a>(
         let stmt = &stmts[i];
 
         if let StmtContextAll::StmtIfContext(ctx) = stmt.as_ref() {
+            let has_error_then = ctx.blockOrEmbed1(0)
+                .map_or(false, |b| matches!(b.as_ref(), BlockOrEmbed1ContextAll::Error(_)));
             let has_error_else = ctx.blockOrEmbed1(1)
                 .map_or(false, |b| matches!(b.as_ref(), BlockOrEmbed1ContextAll::Error(_)));
-            if has_error_else {
+            if has_error_then || has_error_else {
                 let if_col = stmt_col(stmt);
-                // Collect subsequent stmts deeper than `if` col — these are the else body.
+                // Collect subsequent stmts deeper than `if` col.
                 let mut j = i + 1;
                 while j < stmts.len() && stmt_col(&stmts[j]) > if_col {
                     j += 1;
                 }
-                generate_if_stmt_core(emitter, ctx, &stmts[i + 1..j]);
+                let absorbed = &stmts[i + 1..j];
+                let (explicit_then, explicit_else) = if has_error_then && !has_error_else {
+                    // Then-body was absorbed; no else block present.
+                    (absorbed, &[] as &[_])
+                } else {
+                    // Else-body was absorbed (original case), or both — treat all as else.
+                    (&[] as &[_], absorbed)
+                };
+                generate_if_stmt_core(emitter, ctx, explicit_then, explicit_else);
                 i = j;
                 continue;
             }
