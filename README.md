@@ -33,7 +33,7 @@ cargo test
 
 # Run bitvec unit tests under nightly (requires rustup nightly toolchain)
 # Tests BV-1 through BV-8: slice, concat, AslValue, mixed-type arithmetic, etc.
-rustc +nightly --edition 2021 --crate-type lib --test src/runtime/test_bitvec.rs -o /tmp/bitvec_test
+rustc +nightly --edition 2021 --crate-type lib --test src/runtime/test_bitvec.rs -o /tmp/bitvec_test 
 /tmp/bitvec_test
 ```
 

@@ -30,7 +30,7 @@ use crate::parser::aslparser::{
 /// `runtime.rs` by the caller in `main.rs`.
 pub fn generate_asl_runtime(emitter: &mut CodeEmitter) {
     emitter.emit("#![feature(generic_const_exprs)]");
-    emitter.emit("#![allow(incomplete_features, non_snake_case, dead_code, unused_variables, unused_mut, unused_imports)]");
+    emitter.emit("#![allow(incomplete_features, non_snake_case, non_upper_case_globals, dead_code, unused_variables, unused_mut, unused_imports, unused_assignments, non_camel_case_types, unused_parens)]");
     emitter.emit("mod bitvec;");
     emitter.emit("mod runtime;");
     emitter.emit("use bitvec::{BitVec, AslValue};");
